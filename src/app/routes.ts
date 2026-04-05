@@ -10,8 +10,13 @@ import { MonthlyProjectPage } from "./pages/MonthlyProjectPage";
 import { PendingSettlementPage } from "./pages/PendingSettlementPage";
 import { OperationLogPage } from "./pages/OperationLogPage";
 import { AccountPage } from "./pages/AccountPage";
+import { LoginPage } from "./pages/LoginPage";
 
 export const router = createBrowserRouter([
+  {
+    path: "/login",
+    Component: LoginPage,
+  },
   {
     path: "/",
     Component: Layout,

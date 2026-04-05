@@ -1,56 +1,63 @@
-import { useState } from "react";
-import { Outlet, NavLink, useLocation } from "react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import svgPaths from "../../imports/svg-i12ofgoty4";
+import { fetchCurrentUser, logout, type CurrentUser } from "../api/auth";
+import { clearStoredToken } from "../api/http";
 
-// ─── Sidebar Icons ────────────────────────────────────────────────────────────
 function IconHome({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p743b400} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p743b400} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconPerson({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p2527880} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p2527880} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconTool({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 18 18" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p2121dc00} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p2121dc00} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconSettings({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 22" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p54642b0} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p54642b0} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconSave({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p22866482} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p22866482} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconAttachment({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.pbf49200} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.pbf49200} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconMessage() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -58,6 +65,7 @@ function IconMessage() {
     </svg>
   );
 }
+
 function IconBell() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -65,23 +73,25 @@ function IconBell() {
     </svg>
   );
 }
+
 function IconCreate({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p54642b0} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p54642b0} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
+
 function IconSettle({ active }: { active?: boolean }) {
-  const c = active ? "#272b30" : "#6F767E";
+  const color = active ? "#272b30" : "#6F767E";
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path clipRule="evenodd" d={svgPaths.p22866482} fill={c} fillRule="evenodd" />
+      <path clipRule="evenodd" d={svgPaths.p22866482} fill={color} fillRule="evenodd" />
     </svg>
   );
 }
-// Chevron down/up
+
 function IconChevron({ open }: { open: boolean }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}>
@@ -90,102 +100,193 @@ function IconChevron({ open }: { open: boolean }) {
   );
 }
 
-// ─── Sidebar section with collapsible children ────────────────────────────────
-type NavItem = { label: string; to: string; icon: (active: boolean) => JSX.Element };
-type Section = { label: string; emoji: string; items: NavItem[] };
+type NavItem = {
+  label: string;
+  to: string;
+  icon: (active: boolean) => ReactNode;
+};
+
+type Section = {
+  label: string;
+  emoji: string;
+  items: NavItem[];
+};
 
 function SidebarSection({ section, defaultOpen = true }: { section: Section; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const location = useLocation();
-  const isAnyActive = section.items.some((i) => location.pathname === i.to || location.pathname.startsWith(i.to + "/"));
+  const isAnyActive = section.items.some((item) => location.pathname === item.to || location.pathname.startsWith(`${item.to}/`));
 
   return (
     <div className="flex flex-col">
-      {/* Section header */}
       <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center justify-between px-[12px] py-[8px] rounded-[8px] hover:bg-[#f4f4f4] transition-colors group"
+        onClick={() => setOpen((value) => !value)}
+        className="flex items-center justify-between rounded-[8px] px-[12px] py-[8px] transition-colors hover:bg-[#f4f4f4]"
       >
         <div className="flex items-center gap-[8px]">
           <span className="text-[14px]">{section.emoji}</span>
-          <span className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[13px] leading-[20px] tracking-[-0.1px] ${isAnyActive ? "text-[#272b30]" : "text-[#9a9fa5]"}`}>
+          <span
+            className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[20px] tracking-[-0.1px] ${
+              isAnyActive ? "text-[#272b30]" : "text-[#9a9fa5]"
+            }`}
+          >
             {section.label}
           </span>
         </div>
         <IconChevron open={open} />
       </button>
 
-      {/* Sub items */}
-      {open && (
-        <div className="flex flex-col gap-[2px] mt-[2px] ml-[8px] pl-[12px] border-l border-[#efefef]">
+      {open ? (
+        <div className="mt-[2px] ml-[8px] flex flex-col gap-[2px] border-l border-[#efefef] pl-[12px]">
           {section.items.map((item) => {
             const active = location.pathname === item.to;
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={`flex items-center gap-[10px] px-[12px] py-[10px] rounded-[10px] transition-colors ${
+                className={`flex items-center gap-[10px] rounded-[10px] px-[12px] py-[10px] transition-colors ${
                   active
                     ? "bg-[#efefef] shadow-[inset_0px_-2px_1px_0px_rgba(0,0,0,0.05),inset_0px_1px_1px_0px_white]"
                     : "hover:bg-[#f4f4f4]"
                 }`}
               >
                 {item.icon(active)}
-                <span className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[14px] leading-[22px] tracking-[-0.14px] ${active ? "text-[#272b30]" : "text-[#6f767e]"}`}>
+                <span
+                  className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[14px] font-semibold leading-[22px] tracking-[-0.14px] ${
+                    active ? "text-[#272b30]" : "text-[#6f767e]"
+                  }`}
+                >
                   {item.label}
                 </span>
-                {active && <div className="ml-auto w-[6px] h-[6px] rounded-full bg-[#272b30]" />}
+                {active ? <div className="ml-auto h-[6px] w-[6px] rounded-full bg-[#272b30]" /> : null}
               </NavLink>
             );
           })}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
+function getRoleLabel(role?: string) {
+  switch (role) {
+    case "admin":
+      return "平台管理员";
+    case "branch_admin":
+      return "公司管理员";
+    case "user":
+      return "普通用户";
+    default:
+      return "未登录";
+  }
+}
+
+function getAvatarText(user: CurrentUser | null) {
+  if (!user) {
+    return "访";
+  }
+  return user.name?.slice(-1) || user.username?.slice(-1) || "用";
+}
+
 export function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [loadingUser, setLoadingUser] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchCurrentUser()
+      .then((user) => {
+        if (!cancelled) {
+          setCurrentUser(user);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCurrentUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingUser(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!loadingUser && !currentUser) {
+      navigate("/login", { replace: true });
+    }
+  }, [currentUser, loadingUser, navigate]);
 
   const sections: Section[] = [
     {
       label: "基础数据",
-      emoji: "📚",
+      emoji: "📘",
       items: [
-        { label: "人员管理", to: "/personnel", icon: (a) => <IconPerson active={a} /> },
-        { label: "设备管理", to: "/equipment", icon: (a) => <IconTool active={a} /> },
-        { label: "打卡记录导入", to: "/attendance", icon: (a) => <IconSave active={a} /> },
+        { label: "人员管理", to: "/personnel", icon: (active) => <IconPerson active={active} /> },
+        { label: "设备管理", to: "/equipment", icon: (active) => <IconTool active={active} /> },
+        { label: "打卡记录导入", to: "/attendance", icon: (active) => <IconSave active={active} /> },
       ],
     },
     {
       label: "项目管理",
       emoji: "📁",
       items: [
-        { label: "项目列表", to: "/projects", icon: (a) => <IconAttachment active={a} /> },
-        { label: "创建项目", to: "/projects/create", icon: (a) => <IconCreate active={a} /> },
-        { label: "月度总结", to: "/projects/monthly", icon: (a) => <IconSave active={a} /> },
-        { label: "待结算项目", to: "/projects/pending-settlement", icon: (a) => <IconSettle active={a} /> },
+        { label: "项目列表", to: "/projects", icon: (active) => <IconAttachment active={active} /> },
+        { label: "创建项目", to: "/projects/create", icon: (active) => <IconCreate active={active} /> },
+        { label: "月度汇总", to: "/projects/monthly", icon: (active) => <IconSave active={active} /> },
+        { label: "待结算项目", to: "/projects/pending-settlement", icon: (active) => <IconSettle active={active} /> },
       ],
     },
     {
       label: "系统管理",
       emoji: "⚙️",
       items: [
-        { label: "操作日志", to: "/operation-log", icon: (a) => <IconSave active={a} /> },
-        { label: "账号管理", to: "/accounts", icon: (a) => <IconSettings active={a} /> },
+        { label: "操作日志", to: "/operation-log", icon: (active) => <IconSave active={active} /> },
+        { label: "账号管理", to: "/accounts", icon: (active) => <IconSettings active={active} /> },
       ],
     },
   ];
 
+  async function handleLogout() {
+    try {
+      await logout();
+    } catch {
+      // 后端退出失败时也清理本地 token，避免界面卡住。
+    } finally {
+      clearStoredToken();
+      setCurrentUser(null);
+      navigate("/login", { replace: true });
+    }
+  }
+
+  if (loadingUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f4f4]">
+        <div className="rounded-[20px] bg-white px-[28px] py-[20px] text-[14px] text-[#6f767e] shadow-[0_24px_60px_rgba(15,23,42,0.08)]">
+          正在加载系统...
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return null;
+  }
+
   return (
-    <div className="bg-[#f4f4f4] min-h-screen w-full flex">
-      {/* ── Sidebar ── */}
-      <div className="w-[260px] min-h-screen bg-[#fcfcfc] flex-shrink-0 shadow-[inset_-1px_0_0_#f4f4f4] flex flex-col">
-        <div className="flex flex-col gap-[32px] px-[20px] py-[24px] flex-1">
-          {/* Logo */}
-          <div className="flex gap-[12px] items-center px-[4px]">
-            <div className="relative shrink-0 size-[40px]">
+    <div className="flex min-h-screen w-full bg-[#f4f4f4]">
+      <div className="flex min-h-screen w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
+        <div className="flex flex-1 flex-col gap-[32px] px-[20px] py-[24px]">
+          <div className="flex items-center gap-[12px] px-[4px]">
+            <div className="relative size-[40px] shrink-0">
               <svg className="absolute block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">
                 <path d={svgPaths.p36aee800} fill="#272B30" />
                 <rect fill="url(#sb_g0)" height="8" rx="2" width="4" x="14" y="20" />
@@ -193,57 +294,72 @@ export function Layout() {
                 <rect fill="url(#sb_g1)" height="8" rx="2" width="4" x="30" y="20" />
                 <defs>
                   <linearGradient id="sb_g0" x1="16" x2="16" y1="20" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="white" /><stop offset="1" stopColor="#D0D0D0" />
+                    <stop stopColor="white" />
+                    <stop offset="1" stopColor="#D0D0D0" />
                   </linearGradient>
                   <linearGradient id="sb_g1" x1="32" x2="32" y1="20" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="white" /><stop offset="1" stopColor="#D0D0D0" />
+                    <stop stopColor="white" />
+                    <stop offset="1" stopColor="#D0D0D0" />
                   </linearGradient>
                 </defs>
               </svg>
             </div>
-            <p className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[13px] text-[#272b30] leading-[20px] tracking-[-0.1px]">
-              研发费用合规<br />智能管理系统
+            <p className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[20px] tracking-[-0.1px] text-[#272b30]">
+              研发费用合规
+              <br />
+              智能管理系统
             </p>
           </div>
 
-          {/* 首页 */}
           <div className="flex flex-col gap-[4px]">
             <NavLink
               to="/"
               end
-              className={`flex items-center gap-[10px] px-[12px] py-[10px] rounded-[10px] transition-colors ${
+              className={`flex items-center gap-[10px] rounded-[10px] px-[12px] py-[10px] transition-colors ${
                 location.pathname === "/"
                   ? "bg-[#efefef] shadow-[inset_0px_-2px_1px_0px_rgba(0,0,0,0.05),inset_0px_1px_1px_0px_white]"
                   : "hover:bg-[#f4f4f4]"
               }`}
             >
               <IconHome active={location.pathname === "/"} />
-              <span className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[14px] leading-[22px] tracking-[-0.14px] ${location.pathname === "/" ? "text-[#272b30]" : "text-[#6f767e]"}`}>
+              <span
+                className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[14px] font-semibold leading-[22px] tracking-[-0.14px] ${
+                  location.pathname === "/" ? "text-[#272b30]" : "text-[#6f767e]"
+                }`}
+              >
                 首页
               </span>
-              {location.pathname === "/" && <div className="ml-auto w-[6px] h-[6px] rounded-full bg-[#272b30]" />}
+              {location.pathname === "/" ? <div className="ml-auto h-[6px] w-[6px] rounded-full bg-[#272b30]" /> : null}
             </NavLink>
           </div>
 
-          {/* Sections */}
           <div className="flex flex-col gap-[20px]">
-            {sections.map((s) => (
-              <SidebarSection key={s.label} section={s} defaultOpen={true} />
+            {sections.map((section) => (
+              <SidebarSection key={section.label} section={section} />
             ))}
           </div>
         </div>
 
-        {/* Bottom avatar */}
-        <div className="px-[20px] py-[20px] border-t border-[#f4f4f4]">
+        <div className="border-t border-[#f4f4f4] px-[20px] py-[20px]">
           <div className="flex items-center gap-[10px]">
-            <div className="overflow-clip relative rounded-full size-[36px] bg-gradient-to-br from-[#ffbc99] to-[#ff9a6c] flex-shrink-0 flex items-center justify-center">
-              <span className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[14px] text-white">管</span>
+            <div className="relative flex size-[36px] flex-shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-br from-[#ffbc99] to-[#ff9a6c]">
+              <span className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[14px] font-semibold text-white">
+                {getAvatarText(currentUser)}
+              </span>
             </div>
-            <div className="flex flex-col">
-              <span className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] font-semibold text-[13px] text-[#272b30] leading-[18px]">管理员</span>
-              <span className="text-[11px] text-[#9a9fa5] font-['Inter:Regular',sans-serif] leading-[16px]">admin@system.com</span>
+            <div className="min-w-0 flex flex-col">
+              <span className="truncate font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[18px] text-[#272b30]">
+                {currentUser?.name || currentUser?.username || "未登录"}
+              </span>
+              <span className="truncate font-['Inter:Regular',sans-serif] text-[11px] leading-[16px] text-[#9a9fa5]">
+                {currentUser?.email || getRoleLabel(currentUser?.role)}
+              </span>
             </div>
-            <button className="ml-auto text-[#9a9fa5] hover:text-[#272b30] transition-colors">
+            <button
+              onClick={handleLogout}
+              className="ml-auto text-[#9a9fa5] transition-colors hover:text-[#272b30]"
+              title="退出登录"
+            >
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path d="M10 2l4 4-4 4M14 6H6M6 3H3a1 1 0 00-1 1v8a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -252,23 +368,20 @@ export function Layout() {
         </div>
       </div>
 
-      {/* ── Main ── */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        {/* Top bar */}
-        <div className="h-[72px] bg-[#fcfcfc] flex items-center justify-end px-[40px] flex-shrink-0 shadow-[inset_0_-1px_0_#f4f4f4]">
-          <div className="flex gap-[8px] items-center">
-            <div className="relative w-[40px] h-[40px] rounded-[10px] hover:bg-[#f4f4f4] flex items-center justify-center cursor-pointer transition-colors">
+      <div className="flex min-h-screen flex-1 flex-col overflow-hidden">
+        <div className="flex h-[72px] flex-shrink-0 items-center justify-end bg-[#fcfcfc] px-[40px] shadow-[inset_0_-1px_0_#f4f4f4]">
+          <div className="flex items-center gap-[8px]">
+            <div className="relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-[10px] transition-colors hover:bg-[#f4f4f4]">
               <IconMessage />
-              <div className="absolute top-[8px] right-[8px] w-[7px] h-[7px] bg-[#ff6a55] rounded-full border-2 border-[#fcfcfc]" />
+              <div className="absolute top-[8px] right-[8px] h-[7px] w-[7px] rounded-full border-2 border-[#fcfcfc] bg-[#ff6a55]" />
             </div>
-            <div className="relative w-[40px] h-[40px] rounded-[10px] hover:bg-[#f4f4f4] flex items-center justify-center cursor-pointer transition-colors">
+            <div className="relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-[10px] transition-colors hover:bg-[#f4f4f4]">
               <IconBell />
-              <div className="absolute top-[8px] right-[8px] w-[7px] h-[7px] bg-[#ff6a55] rounded-full border-2 border-[#fcfcfc]" />
+              <div className="absolute top-[8px] right-[8px] h-[7px] w-[7px] rounded-full border-2 border-[#fcfcfc] bg-[#ff6a55]" />
             </div>
           </div>
         </div>
 
-        {/* Page content */}
         <div className="flex-1 overflow-auto">
           <Outlet />
         </div>
