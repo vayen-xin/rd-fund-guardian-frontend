@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { fetchCurrentUser, type CurrentUser } from "../api/auth";
 import { deleteVoucherFile, downloadVoucherFile, uploadVoucherFile } from "../api/files";
 import {
@@ -87,6 +88,22 @@ function calculateGrandTotal(fees: MonthlyFees) {
     const groupSum = [...group.systemItems, ...group.manualItems].reduce((inner, item) => inner + Number(item.amount || 0), 0);
     return sum + groupSum;
   }, 0);
+}
+
+const monthlyChartPalette = ["#4f6bed", "#1f9d72", "#f0a43a", "#d65db1", "#7950f2", "#00a7c4", "#f76707", "#868e96"];
+
+function buildFeeBreakdownData(categories: MonthlyFeeSchemaCategory[], fees: MonthlyFees) {
+  return categories
+    .map((category, index) => {
+      const group = fees[category.code] ?? { systemItems: [], manualItems: [] };
+      const total = [...group.systemItems, ...group.manualItems].reduce((sum, item) => sum + Number(item.amount || 0), 0);
+      return {
+        name: category.label,
+        value: total,
+        color: monthlyChartPalette[index % monthlyChartPalette.length],
+      };
+    })
+    .filter((item) => item.value > 0);
 }
 
 function toMonthlyEmployeeFromOption(item: BackendOptionItem): MonthlyEmployeeItem {
@@ -371,6 +388,7 @@ function MonthlyEditorModal({
   }, [categories, detail]);
 
   const grandTotal = useMemo(() => calculateGrandTotal(fees), [fees]);
+  const feeBreakdownData = useMemo(() => buildFeeBreakdownData(categories, fees), [categories, fees]);
   const readOnly = detail.status === "settled";
 
   function updateManualItem(categoryCode: string, index: number, patch: Partial<MonthlyFeeItem>) {
@@ -539,6 +557,58 @@ function MonthlyEditorModal({
                     ))
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-[20px] rounded-[16px] border border-[#f4f4f4] bg-white p-[20px]">
+            <div className="mb-[14px] flex items-center justify-between">
+              <div>
+                <div className="text-[16px] font-semibold text-[#272b30]">费用结构概览</div>
+                <div className="mt-[4px] text-[12px] text-[#8c8f94]">把 8 大费用分类做成比例图，方便快速看出本月支出重心。</div>
+              </div>
+              <div className="rounded-[999px] bg-[#f4f7fb] px-[10px] py-[5px] text-[12px] font-medium text-[#6f767e]">
+                合计 {formatMoney(grandTotal)}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-[16px] lg:grid-cols-[320px_1fr]">
+              <div className="h-[260px]">
+                {feeBreakdownData.length ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={feeBreakdownData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={90} paddingAngle={2}>
+                        {feeBreakdownData.map((item) => (
+                          <Cell key={item.name} fill={item.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value: number) => [formatMoney(value), "金额"]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#8c8f94]">
+                    暂无费用数据
+                  </div>
+                )}
+              </div>
+
+              <div className="grid content-start gap-[10px] md:grid-cols-2">
+                {(feeBreakdownData.length ? feeBreakdownData : categories.map((category, index) => ({
+                  name: category.label,
+                  value: 0,
+                  color: monthlyChartPalette[index % monthlyChartPalette.length],
+                }))).map((item) => (
+                  <div key={item.name} className="rounded-[14px] bg-[#fafbfc] px-[14px] py-[12px]">
+                    <div className="flex items-center gap-[10px]">
+                      <span className="h-[10px] w-[10px] rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-[13px] font-medium text-[#4b5563]">{item.name}</span>
+                    </div>
+                    <div className="mt-[8px] text-[16px] font-semibold text-[#272b30]">{formatMoney(item.value)}</div>
+                    <div className="mt-[2px] text-[12px] text-[#8c8f94]">
+                      {grandTotal > 0 ? `占比 ${((item.value / grandTotal) * 100).toFixed(1)}%` : "占比 0.0%"}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
