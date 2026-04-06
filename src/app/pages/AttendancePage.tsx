@@ -35,10 +35,56 @@ function formatSource(source?: string) {
   return source === "系统导入" ? "系统导入" : "手动录入";
 }
 
+function truncateProjectLabel(project: BackendProject) {
+  const name = project.projectName.length > 18 ? `${project.projectName.slice(0, 18)}...` : project.projectName;
+  return `${project.code || "未设置项目号"} - ${name}`;
+}
+
+function Pagination({
+  page,
+  size,
+  total,
+  onChange,
+}: {
+  page: number;
+  size: number;
+  total: number;
+  onChange: (nextPage: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / size));
+  return (
+    <div className="flex items-center justify-between border-t border-[#f4f4f4] px-[20px] py-[16px]">
+      <div className="text-[12px] text-[#9a9fa5]">
+        第 <span className="font-semibold text-[#272b30]">{page}</span> / {totalPages} 页，共 {total} 条
+      </div>
+      <div className="flex items-center gap-[8px]">
+        <button
+          type="button"
+          onClick={() => onChange(page - 1)}
+          disabled={page <= 1}
+          className="h-[34px] rounded-[10px] border border-[#efefef] bg-white px-[14px] text-[12px] font-semibold text-[#272b30] disabled:opacity-50"
+        >
+          上一页
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange(page + 1)}
+          disabled={page >= totalPages}
+          className="h-[34px] rounded-[10px] border border-[#efefef] bg-white px-[14px] text-[12px] font-semibold text-[#272b30] disabled:opacity-50"
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RecordModal({
   title,
   form,
   saving,
+  projectOptions,
+  employeeHint,
   onChange,
   onLookupEmployeeId,
   onLookupName,
@@ -48,6 +94,8 @@ function RecordModal({
   title: string;
   form: FormState;
   saving: boolean;
+  projectOptions: BackendProject[];
+  employeeHint: string;
   onChange: (field: keyof FormState, value: string) => void;
   onLookupEmployeeId: () => void;
   onLookupName: () => void;
@@ -57,37 +105,54 @@ function RecordModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onCancel} />
-      <div className="relative w-[520px] rounded-[16px] bg-white p-[32px] shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
+      <div className="relative w-[560px] rounded-[18px] bg-white p-[32px] shadow-[0_8px_40px_rgba(0,0,0,0.12)]">
         <h3 className="mb-[24px] text-[18px] font-semibold text-[#272b30]">{title}</h3>
         <div className="grid grid-cols-2 gap-[16px]">
           <div>
             <label className="mb-[6px] block text-[13px] font-medium text-[#6f767e]">工号</label>
-            <input
-              value={form.employeeId}
-              onChange={(event) => onChange("employeeId", event.target.value)}
-              onBlur={onLookupEmployeeId}
-              placeholder="输入工号自动匹配姓名"
-              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
-            />
+            <div className="flex gap-[8px]">
+              <input
+                value={form.employeeId}
+                onChange={(event) => onChange("employeeId", event.target.value)}
+                onBlur={onLookupEmployeeId}
+                placeholder="输入工号后自动匹配姓名"
+                className="h-[42px] flex-1 rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
+              />
+              <button type="button" onClick={onLookupEmployeeId} className="h-[42px] rounded-[10px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]">
+                匹配
+              </button>
+            </div>
           </div>
           <div>
             <label className="mb-[6px] block text-[13px] font-medium text-[#6f767e]">姓名</label>
-            <input
-              value={form.name}
-              onChange={(event) => onChange("name", event.target.value)}
-              onBlur={onLookupName}
-              placeholder="输入姓名自动匹配工号"
-              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
-            />
+            <div className="flex gap-[8px]">
+              <input
+                value={form.name}
+                onChange={(event) => onChange("name", event.target.value)}
+                onBlur={onLookupName}
+                placeholder="输入姓名后自动匹配工号"
+                className="h-[42px] flex-1 rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
+              />
+              <button type="button" onClick={onLookupName} className="h-[42px] rounded-[10px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]">
+                匹配
+              </button>
+            </div>
           </div>
+          <div className="col-span-2 -mt-[4px] text-[12px] text-[#9a9fa5]">{employeeHint || "支持模糊匹配，建议输入完整工号或姓名后点匹配。"}</div>
           <div>
             <label className="mb-[6px] block text-[13px] font-medium text-[#6f767e]">项目号</label>
-            <input
+            <select
               value={form.projectCode}
               onChange={(event) => onChange("projectCode", event.target.value)}
-              placeholder="请输入项目号"
-              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
-            />
+              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none"
+            >
+              <option value="">请选择项目</option>
+              {projectOptions.map((project) => (
+                <option key={project.id} value={project.code || ""} title={project.projectName}>
+                  {truncateProjectLabel(project)}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-[6px] block text-[13px] font-medium text-[#6f767e]">打卡日期</label>
@@ -95,7 +160,7 @@ function RecordModal({
               type="date"
               value={form.date}
               onChange={(event) => onChange("date", event.target.value)}
-              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
+              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none"
             />
           </div>
           <div className="col-span-2">
@@ -106,7 +171,7 @@ function RecordModal({
               min="0"
               value={form.duration}
               onChange={(event) => onChange("duration", event.target.value)}
-              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none focus:border-[#272b30]"
+              className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none"
             />
           </div>
         </div>
@@ -142,10 +207,9 @@ function ImportPreviewModal({
         <div className="border-b border-[#f4f4f4] px-[28px] py-[22px]">
           <h3 className="text-[20px] font-semibold text-[#272b30]">导入预览</h3>
           <p className="mt-[6px] text-[13px] text-[#9a9fa5]">
-            成功 {preview.successCount} 条，失败 {preview.failedCount} 条。确认后将按工号 + 项目号 + 日期覆盖导入。
+            成功 {preview.successCount} 条，失败 {preview.failedCount} 条。确认后将按 工号 + 项目号 + 日期 覆盖导入。
           </p>
         </div>
-
         <div className="flex-1 overflow-auto p-[24px]">
           <div className="overflow-hidden rounded-[14px] border border-[#f4f4f4]">
             <table className="w-full border-collapse">
@@ -172,7 +236,6 @@ function ImportPreviewModal({
             </table>
           </div>
         </div>
-
         <div className="flex items-center justify-end gap-[12px] border-t border-[#f4f4f4] px-[28px] py-[20px]">
           <button type="button" onClick={onClose} className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[18px] text-[13px] font-semibold text-[#6f767e]">
             取消
@@ -197,6 +260,9 @@ export function AttendancePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [importMonth, setImportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [page, setPage] = useState(1);
+  const [size] = useState(10);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -205,20 +271,41 @@ export function AttendancePage() {
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [preview, setPreview] = useState<AttendanceImportPreview | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [employeeHint, setEmployeeHint] = useState("");
 
-  async function loadRecords() {
+  async function loadRecords(
+    nextPage = page,
+    overrides?: Partial<{
+      employeeId: string;
+      name: string;
+      projectCode: string;
+      startDate: string;
+      endDate: string;
+    }>,
+  ) {
     setLoading(true);
     setPageError("");
     try {
-      setRecords(
-        await fetchAttendance({
-          employeeId: employeeId || undefined,
-          name: name || undefined,
-          projectCode: projectCode || undefined,
-          startDate: startDate || undefined,
-          endDate: endDate || undefined,
-        }),
-      );
+      const filters = {
+        employeeId,
+        name,
+        projectCode,
+        startDate,
+        endDate,
+        ...overrides,
+      };
+      const response = await fetchAttendance({
+        page: nextPage,
+        size,
+        employeeId: filters.employeeId || undefined,
+        name: filters.name || undefined,
+        projectCode: filters.projectCode || undefined,
+        startDate: filters.startDate || undefined,
+        endDate: filters.endDate || undefined,
+      });
+      setRecords(response.list);
+      setPage(response.page);
+      setTotal(response.total);
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "打卡记录加载失败");
     } finally {
@@ -229,14 +316,14 @@ export function AttendancePage() {
   async function loadProjects() {
     try {
       const response = await fetchAllProjects();
-      setProjectOptions(response.records);
+      setProjectOptions(response.records.filter((item) => item.code));
     } catch {
-      // ignore to keep attendance page usable
+      // ignore
     }
   }
 
   useEffect(() => {
-    void loadRecords();
+    void loadRecords(1);
     void loadProjects();
   }, []);
 
@@ -244,31 +331,44 @@ export function AttendancePage() {
 
   async function handleLookupByEmployeeId() {
     if (!form.employeeId.trim()) {
+      setEmployeeHint("");
       return;
     }
     try {
       const data = await lookupAttendanceEmployee({ employeeId: form.employeeId.trim() });
-      setForm((prev) => ({ ...prev, employeeId: data.employeeId, name: data.name }));
-    } catch {
-      // ignore
+      if (!data.employeeId) {
+        setEmployeeHint(data.hint || "未找到匹配员工");
+        return;
+      }
+      setForm((prev) => ({ ...prev, employeeId: data.employeeId || prev.employeeId, name: data.name || prev.name }));
+      setEmployeeHint(data.hint || "已自动匹配到员工信息");
+    } catch (error) {
+      setEmployeeHint(error instanceof Error ? error.message : "工号匹配失败");
     }
   }
 
   async function handleLookupByName() {
     if (!form.name.trim()) {
+      setEmployeeHint("");
       return;
     }
     try {
       const data = await lookupAttendanceEmployee({ name: form.name.trim() });
-      setForm((prev) => ({ ...prev, employeeId: data.employeeId, name: data.name }));
-    } catch {
-      // ignore
+      if (!data.employeeId) {
+        setEmployeeHint(data.hint || "未找到匹配员工");
+        return;
+      }
+      setForm((prev) => ({ ...prev, employeeId: data.employeeId || prev.employeeId, name: data.name || prev.name }));
+      setEmployeeHint(data.hint || "已自动匹配到员工信息");
+    } catch (error) {
+      setEmployeeHint(error instanceof Error ? error.message : "姓名匹配失败");
     }
   }
 
   function openCreate() {
     setEditingRecord(null);
     setForm(EMPTY_FORM);
+    setEmployeeHint("");
     setShowModal(true);
   }
 
@@ -281,6 +381,7 @@ export function AttendancePage() {
       date: record.date,
       duration: String(record.duration),
     });
+    setEmployeeHint("");
     setShowModal(true);
   }
 
@@ -309,7 +410,7 @@ export function AttendancePage() {
       setEditingRecord(null);
       setForm(EMPTY_FORM);
       setShowModal(false);
-      await loadRecords();
+      await loadRecords(1);
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "保存打卡记录失败");
     } finally {
@@ -324,7 +425,7 @@ export function AttendancePage() {
     setPageError("");
     try {
       await deleteAttendance(record.id);
-      await loadRecords();
+      await loadRecords(page);
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "删除打卡记录失败");
     }
@@ -345,15 +446,13 @@ export function AttendancePage() {
   }
 
   async function handleConfirmImport() {
-    if (!preview) {
-      return;
-    }
+    if (!preview) return;
     setImporting(true);
     setPageError("");
     try {
       await confirmAttendanceImport(preview.rows as AttendanceImportRow[]);
       setPreview(null);
-      await loadRecords();
+      await loadRecords(1);
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "确认导入失败");
     } finally {
@@ -379,12 +478,12 @@ export function AttendancePage() {
               <select
                 value={templateProjectId}
                 onChange={(event) => setTemplateProjectId(event.target.value)}
-                className="h-[40px] min-w-[220px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]"
+                className="h-[40px] min-w-[260px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none"
               >
                 <option value="">通用模板</option>
                 {projectOptions.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.projectName}
+                  <option key={project.id} value={project.id} title={project.projectName}>
+                    {truncateProjectLabel(project)}
                   </option>
                 ))}
               </select>
@@ -395,30 +494,21 @@ export function AttendancePage() {
                 type="month"
                 value={importMonth}
                 onChange={(event) => setImportMonth(event.target.value)}
-                className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]"
+                className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none"
               />
             </div>
             <button
               type="button"
-              onClick={() =>
-                void downloadAttendanceTemplate({
-                  projectId: templateProjectId || undefined,
-                  month: importMonth || undefined,
-                })
-              }
+              onClick={() => void downloadAttendanceTemplate({ projectId: templateProjectId || undefined, month: importMonth || undefined })}
               className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[16px] text-[13px] font-semibold text-[#272b30]"
             >
               下载导入模板
             </button>
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[16px] text-[13px] font-semibold text-[#272b30]"
-            >
+            <button type="button" onClick={() => fileInputRef.current?.click()} className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[16px] text-[13px] font-semibold text-[#272b30]">
               上传打卡记录
             </button>
             <button type="button" onClick={openCreate} className="h-[40px] rounded-[10px] bg-[#272b30] px-[16px] text-[13px] font-semibold text-white">
-              数据添加
+              手动新增
             </button>
             <input
               ref={fileInputRef}
@@ -427,9 +517,7 @@ export function AttendancePage() {
               hidden
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) {
-                  void handleUploadFile(file);
-                }
+                if (file) void handleUploadFile(file);
                 event.currentTarget.value = "";
               }}
             />
@@ -440,43 +528,44 @@ export function AttendancePage() {
           <div className="mb-[16px] flex flex-wrap items-end gap-[12px]">
             <div>
               <label className="mb-[6px] block text-[12px] font-medium text-[#6f767e]">工号</label>
-              <input value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]" />
+              <input value={employeeId} onChange={(event) => setEmployeeId(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none" />
             </div>
             <div>
               <label className="mb-[6px] block text-[12px] font-medium text-[#6f767e]">姓名</label>
-              <input value={name} onChange={(event) => setName(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]" />
+              <input value={name} onChange={(event) => setName(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none" />
             </div>
             <div>
               <label className="mb-[6px] block text-[12px] font-medium text-[#6f767e]">项目号</label>
-              <input value={projectCode} onChange={(event) => setProjectCode(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]" />
+              <input value={projectCode} onChange={(event) => setProjectCode(event.target.value)} className="h-[40px] w-[160px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none" />
             </div>
             <div>
               <label className="mb-[6px] block text-[12px] font-medium text-[#6f767e]">开始日期</label>
-              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]" />
+              <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none" />
             </div>
             <div>
               <label className="mb-[6px] block text-[12px] font-medium text-[#6f767e]">结束日期</label>
-              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none focus:border-[#272b30]" />
+              <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] outline-none" />
             </div>
-            <button type="button" onClick={() => void loadRecords()} className="h-[40px] rounded-[10px] bg-[#272b30] px-[16px] text-[13px] font-semibold text-white">
+            <button type="button" onClick={() => void loadRecords(1)} className="h-[40px] rounded-[10px] bg-[#272b30] px-[16px] text-[13px] font-semibold text-white">
               查询
             </button>
             <button
               type="button"
               onClick={() => {
+                const emptyFilters = { employeeId: "", name: "", projectCode: "", startDate: "", endDate: "" };
                 setEmployeeId("");
                 setName("");
                 setProjectCode("");
                 setStartDate("");
                 setEndDate("");
-                void loadRecords();
+                void loadRecords(1, emptyFilters);
               }}
               className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[16px] text-[13px] font-semibold text-[#6f767e]"
             >
               重置
             </button>
             <div className="ml-auto rounded-[12px] bg-[#f4f4f4] px-[16px] py-[10px] text-[13px] text-[#6f767e]">
-              当前共 <span className="font-semibold text-[#272b30]">{records.length}</span> 条，累计 <span className="font-semibold text-[#272b30]">{totalHours.toFixed(1)}</span> 小时
+              当前页 <span className="font-semibold text-[#272b30]">{records.length}</span> 条，累计 <span className="font-semibold text-[#272b30]">{totalHours.toFixed(1)}</span> 小时
             </div>
           </div>
         </div>
@@ -531,29 +620,36 @@ export function AttendancePage() {
               </tbody>
             </table>
           </div>
+          <Pagination page={page} size={size} total={total} onChange={(nextPage) => void loadRecords(nextPage)} />
         </div>
       </div>
 
       {showModal ? (
         <RecordModal
-          title={editingRecord ? "编辑打卡记录" : "数据添加"}
+          title={editingRecord ? "编辑打卡记录" : "手动新增"}
           form={form}
           saving={saving}
-          onChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+          projectOptions={projectOptions}
+          employeeHint={employeeHint}
+          onChange={(field, value) => {
+            setForm((prev) => ({ ...prev, [field]: value }));
+            if (field === "employeeId" || field === "name") {
+              setEmployeeHint("");
+            }
+          }}
           onLookupEmployeeId={() => void handleLookupByEmployeeId()}
           onLookupName={() => void handleLookupByName()}
           onCancel={() => {
             setEditingRecord(null);
             setForm(EMPTY_FORM);
+            setEmployeeHint("");
             setShowModal(false);
           }}
           onConfirm={() => void handleSave()}
         />
       ) : null}
 
-      {preview ? (
-        <ImportPreviewModal preview={preview} importing={importing} onClose={() => setPreview(null)} onConfirm={() => void handleConfirmImport()} />
-      ) : null}
+      {preview ? <ImportPreviewModal preview={preview} importing={importing} onClose={() => setPreview(null)} onConfirm={() => void handleConfirmImport()} /> : null}
     </div>
   );
 }

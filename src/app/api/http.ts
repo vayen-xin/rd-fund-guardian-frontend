@@ -13,8 +13,6 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: BodyInit | Record<string, unknown> | null;
 };
 
-let loginPromise: Promise<void> | null = null;
-
 function getToken() {
   return localStorage.getItem(TOKEN_KEY) ?? "";
 }
@@ -27,50 +25,20 @@ function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-async function performDevLogin() {
-  if (!apiEnv.devUsername || !apiEnv.devPassword) {
+function redirectToLogin() {
+  if (typeof window === "undefined") {
     return;
   }
-
-  const response = await fetch(`${apiEnv.baseUrl}/api/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      username: apiEnv.devUsername,
-      password: apiEnv.devPassword,
-    }),
-  });
-
-  const payload = (await response.json()) as ApiEnvelope<{ token: string }>;
-  if (!response.ok || payload.code !== 200 || !payload.data?.token) {
-    throw new Error(payload.message || "开发环境自动登录失败");
+  if (window.location.pathname !== "/login") {
+    window.location.replace("/login");
   }
-  setToken(payload.data.token);
 }
 
-async function ensureSession() {
-  if (getToken()) {
-    return;
-  }
-  if (!apiEnv.devUsername || !apiEnv.devPassword) {
-    return;
-  }
-  if (!loginPromise) {
-    loginPromise = performDevLogin().finally(() => {
-      loginPromise = null;
-    });
-  }
-  await loginPromise;
-}
-
-export async function apiRequest<T>(path: string, options: RequestOptions = {}, retried = false): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { auth = true, headers, body, ...init } = options;
-  if (auth) {
-    await ensureSession();
-  }
-
   const requestHeaders = new Headers(headers);
   let requestBody: BodyInit | null | undefined = null;
+
   if (body instanceof FormData || typeof body === "string" || body instanceof Blob) {
     requestBody = body;
   } else if (body != null) {
@@ -93,10 +61,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}, 
     return payload.data;
   }
 
-  if (auth && payload.code === 401 && !retried && apiEnv.devUsername && apiEnv.devPassword) {
+  if (auth && (response.status === 401 || response.status === 403 || payload.code === 401 || payload.code === 403)) {
     clearToken();
-    await ensureSession();
-    return apiRequest<T>(path, options, true);
+    redirectToLogin();
   }
 
   throw new Error(payload.message || "请求失败");

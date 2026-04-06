@@ -12,6 +12,13 @@ export type AttendanceRecord = {
   source: string;
 };
 
+export type AttendancePageResponse = {
+  list: AttendanceRecord[];
+  page: number;
+  size: number;
+  total: number;
+};
+
 export type AttendanceSavePayload = {
   employeeId: string;
   name: string;
@@ -21,9 +28,11 @@ export type AttendanceSavePayload = {
 };
 
 export type AttendanceLookup = {
-  employeeId: string;
-  name: string;
+  employeeId?: string;
+  name?: string;
   department?: string;
+  exactMatch?: boolean;
+  hint?: string;
 };
 
 export type AttendanceImportRow = {
@@ -43,40 +52,30 @@ export type AttendanceImportPreview = {
 };
 
 export function fetchAttendance(params: {
+  page: number;
+  size: number;
   employeeId?: string;
   name?: string;
   projectCode?: string;
   startDate?: string;
   endDate?: string;
 }) {
-  const search = new URLSearchParams();
-  if (params.employeeId) {
-    search.set("employeeId", params.employeeId);
-  }
-  if (params.name) {
-    search.set("name", params.name);
-  }
-  if (params.projectCode) {
-    search.set("projectCode", params.projectCode);
-  }
-  if (params.startDate) {
-    search.set("startDate", params.startDate);
-  }
-  if (params.endDate) {
-    search.set("endDate", params.endDate);
-  }
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return apiRequest<AttendanceRecord[]>(`/api/v1/attendance${suffix}`);
+  const search = new URLSearchParams({
+    page: String(params.page),
+    size: String(params.size),
+  });
+  if (params.employeeId) search.set("employeeId", params.employeeId);
+  if (params.name) search.set("name", params.name);
+  if (params.projectCode) search.set("projectCode", params.projectCode);
+  if (params.startDate) search.set("startDate", params.startDate);
+  if (params.endDate) search.set("endDate", params.endDate);
+  return apiRequest<AttendancePageResponse>(`/api/v1/attendance?${search.toString()}`);
 }
 
 export function lookupAttendanceEmployee(params: { employeeId?: string; name?: string }) {
   const search = new URLSearchParams();
-  if (params.employeeId) {
-    search.set("employeeId", params.employeeId);
-  }
-  if (params.name) {
-    search.set("name", params.name);
-  }
+  if (params.employeeId) search.set("employeeId", params.employeeId);
+  if (params.name) search.set("name", params.name);
   return apiRequest<AttendanceLookup>(`/api/v1/attendance/lookup?${search.toString()}`);
 }
 
@@ -118,12 +117,8 @@ export function deleteAttendance(id: number | string) {
 
 export async function downloadAttendanceTemplate(params?: { projectId?: number | string; month?: string }) {
   const search = new URLSearchParams();
-  if (params?.projectId) {
-    search.set("projectId", String(params.projectId));
-  }
-  if (params?.month) {
-    search.set("month", params.month);
-  }
+  if (params?.projectId) search.set("projectId", String(params.projectId));
+  if (params?.month) search.set("month", params.month);
   const suffix = search.toString() ? `?${search.toString()}` : "";
   const response = await fetch(`${apiEnv.baseUrl}/api/v1/attendance/template${suffix}`, {
     headers: {

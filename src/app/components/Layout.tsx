@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import svgPaths from "../../imports/svg-i12ofgoty4";
 import { fetchCurrentUser, logout, type CurrentUser } from "../api/auth";
-import { clearStoredToken } from "../api/http";
+import { clearStoredToken, readStoredToken } from "../api/http";
 
 function IconHome({ active }: { active?: boolean }) {
   const color = active ? "#272b30" : "#6F767E";
@@ -195,6 +195,12 @@ export function Layout() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
+    if (!readStoredToken()) {
+      setLoadingUser(false);
+      setCurrentUser(null);
+      return;
+    }
+
     let cancelled = false;
 
     fetchCurrentUser()

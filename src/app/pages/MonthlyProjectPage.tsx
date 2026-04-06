@@ -493,21 +493,23 @@ function MonthlyEditorModal({
                   </button>
                 ) : null}
               </div>
-              <div className="flex flex-col gap-[10px] p-[20px]">
-                {employees.length === 0 ? (
-                  <div className="rounded-[10px] border border-dashed border-[#d9d9d9] px-[12px] py-[14px] text-[12px] text-[#9a9fa5]">暂无关联员工</div>
-                ) : (
-                  employees.map((item, index) => (
-                    <div key={`${getSelectionKey(item)}-${index}`} className="rounded-[12px] bg-[#fafafa] px-[14px] py-[12px]">
-                      <div className="text-[14px] font-semibold text-[#272b30]">{item.name}</div>
-                      <div className="mt-[4px] text-[12px] text-[#9a9fa5]">
-                        {item.employeeNo || "未设置工号"}
-                        {item.department ? ` · ${item.department}` : ""}
-                        {item.employeeType ? ` · ${item.employeeType}` : ""}
+              <div className="max-h-[280px] overflow-y-auto p-[20px]">
+                <div className="flex flex-col gap-[10px]">
+                  {employees.length === 0 ? (
+                    <div className="rounded-[10px] border border-dashed border-[#d9d9d9] px-[12px] py-[14px] text-[12px] text-[#9a9fa5]">暂无关联员工</div>
+                  ) : (
+                    employees.map((item, index) => (
+                      <div key={`${getSelectionKey(item)}-${index}`} className="rounded-[12px] bg-[#fafafa] px-[14px] py-[12px]">
+                        <div className="text-[14px] font-semibold text-[#272b30]">{item.name}</div>
+                        <div className="mt-[4px] text-[12px] text-[#9a9fa5]">
+                          {item.employeeNo || "未设置工号"}
+                          {item.department ? ` · ${item.department}` : ""}
+                          {item.employeeType ? ` · ${item.employeeType}` : ""}
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
 
@@ -520,21 +522,23 @@ function MonthlyEditorModal({
                   </button>
                 ) : null}
               </div>
-              <div className="flex flex-col gap-[10px] p-[20px]">
-                {devices.length === 0 ? (
-                  <div className="rounded-[10px] border border-dashed border-[#d9d9d9] px-[12px] py-[14px] text-[12px] text-[#9a9fa5]">暂无关联设备</div>
-                ) : (
-                  devices.map((item, index) => (
-                    <div key={`${getSelectionKey(item)}-${index}`} className="rounded-[12px] bg-[#fafafa] px-[14px] py-[12px]">
-                      <div className="text-[14px] font-semibold text-[#272b30]">{item.name || `设备 ${index + 1}`}</div>
-                      <div className="mt-[4px] text-[12px] text-[#9a9fa5]">
-                        {item.deviceNo || "未设置编号"}
-                        {item.category ? ` · ${item.category}` : ""}
-                        {typeof item.depreciationRate === "number" ? ` · 折旧 ${item.depreciationRate}` : ""}
+              <div className="max-h-[280px] overflow-y-auto p-[20px]">
+                <div className="flex flex-col gap-[10px]">
+                  {devices.length === 0 ? (
+                    <div className="rounded-[10px] border border-dashed border-[#d9d9d9] px-[12px] py-[14px] text-[12px] text-[#9a9fa5]">暂无关联设备</div>
+                  ) : (
+                    devices.map((item, index) => (
+                      <div key={`${getSelectionKey(item)}-${index}`} className="rounded-[12px] bg-[#fafafa] px-[14px] py-[12px]">
+                        <div className="text-[14px] font-semibold text-[#272b30]">{item.name || `设备 ${index + 1}`}</div>
+                        <div className="mt-[4px] text-[12px] text-[#9a9fa5]">
+                          {item.deviceNo || "未设置编号"}
+                          {item.category ? ` · ${item.category}` : ""}
+                          {typeof item.depreciationRate === "number" ? ` · 折旧 ${item.depreciationRate}` : ""}
+                        </div>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>

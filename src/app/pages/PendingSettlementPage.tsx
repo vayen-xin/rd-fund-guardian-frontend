@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchCurrentUser, type CurrentUser } from "../api/auth";
-import { fetchMonthlyDetail, fetchProjectMonthlyList, type MonthlyDetail } from "../api/monthly";
+import { fetchMonthlyDetail, fetchProjectMonthlyList, submitMonthlyDetail, type MonthlyDetail } from "../api/monthly";
 import { fetchAllProjects } from "../api/projects";
 import { confirmSettlement, reopenSettlement } from "../api/settlements";
 
@@ -35,12 +35,35 @@ function getStatusStyle(status?: string) {
     case "finalized":
       return "bg-[#fff4e0] text-[#d48806]";
     default:
-      return "bg-[#f4f4f4] text-[#9a9fa5]";
+      return "bg-[#e8f4ff] text-[#1677ff]";
   }
 }
 
 function formatMoney(value: number) {
   return `¥ ${Number(value || 0).toFixed(2)}`;
+}
+
+function getFeeCategoryLabel(code: string) {
+  switch (code) {
+    case "labor":
+      return "人员人工费用";
+    case "direct":
+      return "直接投入费用";
+    case "deprec":
+      return "折旧费用与长期待摊费用";
+    case "intangible":
+      return "无形资产摊销费用";
+    case "design":
+      return "设计费用";
+    case "equip":
+      return "装备调试费用与试验费用";
+    case "outsource":
+      return "委托外部研究开发费用";
+    case "other":
+      return "其他费用";
+    default:
+      return code;
+  }
 }
 
 function DetailModal({
@@ -50,6 +73,7 @@ function DetailModal({
   currentUser,
   acting,
   onClose,
+  onSubmit,
   onConfirm,
   onReopen,
 }: {
@@ -59,6 +83,7 @@ function DetailModal({
   currentUser: CurrentUser | null;
   acting: boolean;
   onClose: () => void;
+  onSubmit: () => void;
   onConfirm: () => void;
   onReopen: () => void;
 }) {
@@ -110,7 +135,7 @@ function DetailModal({
                     const total = [...(group.systemItems || []), ...(group.manualItems || [])].reduce((sum, item) => sum + Number(item.amount || 0), 0);
                     return (
                       <div key={key} className="rounded-[12px] bg-[#fafafa] px-[16px] py-[14px]">
-                        <div className="text-[14px] font-semibold text-[#272b30]">{key}</div>
+                        <div className="text-[14px] font-semibold text-[#272b30]">{getFeeCategoryLabel(key)}</div>
                         <div className="mt-[6px] text-[12px] text-[#9a9fa5]">{formatMoney(total)}</div>
                       </div>
                     );
@@ -125,6 +150,11 @@ function DetailModal({
           <button onClick={onClose} className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[18px] text-[13px] font-semibold text-[#6f767e]">
             关闭
           </button>
+          {row.status === "draft" ? (
+            <button onClick={onSubmit} disabled={acting} className="h-[40px] rounded-[10px] bg-[#1677ff] px-[18px] text-[13px] font-semibold text-white disabled:opacity-50">
+              {acting ? "处理中..." : "发起待结算"}
+            </button>
+          ) : null}
           {row.status === "finalized" ? (
             <button onClick={onConfirm} disabled={acting} className="h-[40px] rounded-[10px] bg-[#272b30] px-[18px] text-[13px] font-semibold text-white disabled:opacity-50">
               {acting ? "处理中..." : "确认结算"}
@@ -132,7 +162,7 @@ function DetailModal({
           ) : null}
           {row.status === "settled" && canReopen ? (
             <button onClick={onReopen} disabled={acting} className="h-[40px] rounded-[10px] bg-[#d48806] px-[18px] text-[13px] font-semibold text-white disabled:opacity-50">
-              {acting ? "处理中..." : "重新结算"}
+              {acting ? "处理中..." : "重新打开编辑"}
             </button>
           ) : null}
         </div>
@@ -151,7 +181,7 @@ export function PendingSettlementPage() {
   const [selectedRow, setSelectedRow] = useState<SettlementRow | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<MonthlyDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [filter, setFilter] = useState<"all" | "finalized" | "settled">("all");
+  const [filter, setFilter] = useState<"all" | "draft" | "finalized" | "settled">("all");
 
   async function loadPage() {
     setLoading(true);
@@ -166,9 +196,6 @@ export function PendingSettlementPage() {
       projectPage.records.forEach((project, index) => {
         const match = monthlyLists[index].find((item) => String(item.workMonth).slice(0, 7) === selectedMonth);
         if (!match) {
-          return;
-        }
-        if (user.role !== "admin" && user.role !== "branch_admin" && match.status !== "finalized") {
           return;
         }
         nextRows.push({
@@ -225,11 +252,27 @@ export function PendingSettlementPage() {
   }, [selectedRow]);
 
   const visibleRows = useMemo(() => {
+    const baseRows = currentUser?.role === "user" ? rows.filter((item) => item.status !== "settled") : rows;
     if (filter === "all") {
-      return rows;
+      return baseRows;
     }
-    return rows.filter((item) => item.status === filter);
-  }, [filter, rows]);
+    return baseRows.filter((item) => item.status === filter);
+  }, [currentUser?.role, filter, rows]);
+
+  async function handleSubmit(row: SettlementRow) {
+    setActing(true);
+    setPageError("");
+    try {
+      await submitMonthlyDetail(row.projectId, row.yearMonth);
+      setSelectedRow(null);
+      setSelectedDetail(null);
+      await loadPage();
+    } catch (error) {
+      setPageError(error instanceof Error ? error.message : "发起待结算失败");
+    } finally {
+      setActing(false);
+    }
+  }
 
   async function handleConfirm(row: SettlementRow) {
     setActing(true);
@@ -266,7 +309,7 @@ export function PendingSettlementPage() {
       <div className="mb-[28px] flex items-center justify-between">
         <div>
           <h1 className="text-[32px] font-semibold leading-[40px] tracking-[-0.6px] text-[#272b30]">待结算项目</h1>
-          <p className="mt-[4px] text-[13px] text-[#9a9fa5]">按月份查看待结算和已结算项目，并支持重新结算。</p>
+          <p className="mt-[4px] text-[13px] text-[#9a9fa5]">在这里完成发起待结算、确认结算和重新结算。</p>
         </div>
         <div className="flex items-center gap-[10px]">
           <input
@@ -275,17 +318,16 @@ export function PendingSettlementPage() {
             onChange={(event) => setSelectedMonth(event.target.value)}
             className="h-[42px] rounded-[10px] border border-[#efefef] bg-[#fcfcfc] px-[12px] text-[13px] text-[#272b30] outline-none"
           />
-          {(currentUser?.role === "admin" || currentUser?.role === "branch_admin") ? (
-            <select
-              value={filter}
-              onChange={(event) => setFilter(event.target.value as "all" | "finalized" | "settled")}
-              className="h-[42px] rounded-[10px] border border-[#efefef] bg-[#fcfcfc] px-[12px] text-[13px] text-[#272b30] outline-none"
-            >
-              <option value="all">全部</option>
-              <option value="finalized">待结算</option>
-              <option value="settled">已结算</option>
-            </select>
-          ) : null}
+          <select
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as "all" | "draft" | "finalized" | "settled")}
+            className="h-[42px] rounded-[10px] border border-[#efefef] bg-[#fcfcfc] px-[12px] text-[13px] text-[#272b30] outline-none"
+          >
+            <option value="all">全部</option>
+            <option value="draft">编辑中</option>
+            <option value="finalized">待结算</option>
+            <option value="settled">已结算</option>
+          </select>
         </div>
       </div>
 
@@ -300,7 +342,7 @@ export function PendingSettlementPage() {
               <thead>
                 <tr className="bg-[#f4f4f4]">
                   {["项目名称", "月份", "金额", "状态", "更新时间", "操作"].map((header) => (
-                    <th key={header} className="px-[20px] py-[12px] text-left text-[12px] font-semibold whitespace-nowrap text-[#6f767e]">
+                    <th key={header} className="whitespace-nowrap px-[20px] py-[12px] text-left text-[12px] font-semibold text-[#6f767e]">
                       {header}
                     </th>
                   ))}
@@ -333,6 +375,15 @@ export function PendingSettlementPage() {
                       <td className="px-[20px] py-[15px] text-[13px] text-[#6f767e]">{row.updatedAt || "-"}</td>
                       <td className="px-[20px] py-[15px]">
                         <div className="flex items-center gap-[8px]">
+                          {row.status === "draft" ? (
+                            <button
+                              onClick={() => void handleSubmit(row)}
+                              disabled={acting}
+                              className="h-[30px] rounded-[8px] border border-[#1677ff]/30 bg-[#e8f4ff] px-[12px] text-[12px] font-semibold text-[#1677ff] disabled:opacity-50"
+                            >
+                              发起待结算
+                            </button>
+                          ) : null}
                           {row.status === "finalized" ? (
                             <button
                               onClick={() => void handleConfirm(row)}
@@ -348,7 +399,7 @@ export function PendingSettlementPage() {
                               disabled={acting}
                               className="h-[30px] rounded-[8px] border border-[#d48806]/30 bg-[#fff4e0] px-[12px] text-[12px] font-semibold text-[#d48806] disabled:opacity-50"
                             >
-                              重新结算
+                              重新打开编辑
                             </button>
                           ) : null}
                           <button
@@ -379,6 +430,7 @@ export function PendingSettlementPage() {
             setSelectedRow(null);
             setSelectedDetail(null);
           }}
+          onSubmit={() => void handleSubmit(selectedRow)}
           onConfirm={() => void handleConfirm(selectedRow)}
           onReopen={() => void handleReopen(selectedRow)}
         />
