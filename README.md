@@ -1,159 +1,149 @@
-# 研发费用合规智能管理系统
+# rd-fund-guardian-frontend
 
-一个基于 React + TypeScript + Tailwind CSS v4 + React Router + Vite 的研发费用管理系统前端应用。
+研发费用合规智能管理系统前端项目。
 
-## 功能模块
-
-### 📚 基础数据
-- **人员管理**：管理员工信息，包括正式员工和兼职员工
-- **设备管理**：管理研发设备资产信息
-- **打卡记录导入**：导入和管理员工打卡数据
-
-### 📁 项目管理
-- **项目列表**：查看和管理所有研发项目（每页固定5条）
-- **创建项目**：创建新项目并关联员工（系数自动生成：正式0.60-0.80，兼职0.40-0.60）
-- **待结算项目**：处理项目结算，包含8个费用类目的管理
-
-### ⚙️ 系统管理
-- **操作日志**：记录和查询系统操作（支持预设条数和自定义分页）
-- **账号管理**：管理系统用户账号（不能停用当前登录账号）
-
-### 🏠 首页
-- 显示系统概览和快速入口
-
-## 特性
-
-- ✨ **双视图模式**：功能页面 + 弹窗设计稿视图，方便设计稿截图
-- 🔒 **二次确认**：所有数据更改操作都需要确认弹窗
-- 🔄 **智能联动**：工号与姓名字段支持双向联动查询
-- 📊 **费用管理**：8个费用类目，人工费用和折旧费用自动生成
-- 🎨 **现代UI**：基于 Tailwind CSS v4 和 Radix UI 组件
+本项目基于 `React + TypeScript + Vite + Tailwind CSS + React Router`，已经完成与后端第一版核心接口的联调，适合作为测试版前端使用。
 
 ## 技术栈
 
-- **框架**：React 18.3.1
-- **语言**：TypeScript
-- **构建工具**：Vite 6.3.5
-- **样式**：Tailwind CSS 4.1.12
-- **路由**：React Router 7.13.0
-- **UI组件**：Radix UI + Material UI
-- **表单**：React Hook Form 7.55.0
-- **图表**：Recharts 2.15.2
-- **拖拽**：React DnD 16.0.1
-- **动画**：Motion 12.23.24
+- `React 18`
+- `TypeScript`
+- `Vite 6`
+- `Tailwind CSS 4`
+- `React Router 7`
+- `Radix UI`
+- `Material UI`
+- `Recharts`
+- `Lucide React`
 
-## 安装
+## 主要页面
 
-推荐使用 pnpm：
+- 登录页
+- 首页概览
+- 人员管理
+- 设备管理
+- 打卡记录导入
+- 项目列表
+- 创建项目
+- 月度汇总
+- 待结算项目
+- 操作日志
+- 账号管理
 
-\`\`\`bash
-pnpm install
-\`\`\`
+## 当前能力
 
-或使用 npm：
-
-\`\`\`bash
-npm install
-\`\`\`
-
-## 运行
-
-开发模式：
-
-\`\`\`bash
-pnpm dev
-\`\`\`
-
-或
-
-\`\`\`bash
-npm run dev
-\`\`\`
-
-然后在浏览器中打开 http://localhost:5173/
-
-## 构建
-
-\`\`\`bash
-pnpm build
-\`\`\`
-
-或
-
-\`\`\`bash
-npm run build
-\`\`\`
+- 已接入后端真实接口的主流程页面
+- 支持登录、退出、未登录跳转
+- 支持项目、员工、设备、账号等基础管理
+- 支持月度费用维护、凭证上传、待结算闭环
+- 支持打卡模板下载、导入预览、确认导入
+- 支持首页与项目列表基础可视化
+- 登录页已接入品牌 Logo 和插画
 
 ## 项目结构
 
-\`\`\`
+```text
 src/
-├── app/
-│   ├── components/      # 组件
-│   │   ├── Layout.tsx   # 布局组件（侧边栏+顶栏）
-│   │   ├── figma/       # Figma 相关组件
-│   │   └── ui/          # UI 基础组件
-│   ├── pages/           # 页面组件
-│   │   ├── HomePage.tsx
-│   │   ├── PersonnelPage.tsx
-│   │   ├── EquipmentPage.tsx
-│   │   ├── AttendancePage.tsx
-│   │   ├── ProjectListPage.tsx
-│   │   ├── CreateProjectPage.tsx
-│   │   ├── PendingSettlementPage.tsx
-│   │   ├── OperationLogPage.tsx
-│   │   └── AccountPage.tsx
-│   ├── App.tsx          # 应用入口
-│   └── routes.ts        # 路由配置
-├── imports/             # 导入的资源
-│   └── svg-i12ofgoty4.ts
-├── styles/              # 样式文件
-│   ├── fonts.css
-│   ├── index.css
-│   ├── tailwind.css
-│   └── theme.css
-└── main.tsx             # React 入口
-\`\`\`
+├─ app/
+│  ├─ api/             接口请求层
+│  ├─ assets/          图片与品牌资源
+│  ├─ components/      通用组件与布局
+│  └─ pages/           页面组件
+├─ imports/            Figma / SVG 导入资源
+├─ styles/             全局样式
+└─ main.tsx            应用入口
+```
 
-## 业务规则
+## 本地运行
 
-### 项目创建
-- 员工关联系数由前端随机生成：
-  - 正式员工：0.60 - 0.80
-  - 兼职员工：0.40 - 0.60
-- 用户可修改系数，范围 0 - 1
+### 1. 安装依赖
 
-### 项目列表
-- 分页固定每页 5 条
-- 时间范围筛选使用时间段重叠逻辑
+使用 `npm`：
 
-### 待结算项目
-8个费用类目：
-1. 人工费用（自动生成，不可删除，可上传凭证）
-2. 直接投入费用（手动添加）
-3. 折旧费用（自动生成，不可删除，可上传凭证）
-4. 无形资产摊销（手动添加）
-5. 设计试验费用（手动添加）
-6. 外包合作费用（手动添加）
-7. 知识产权相关费用（手动添加）
-8. 其他相关费用（手动添加）
+```powershell
+npm install
+```
 
-### 打卡记录
-- 数据来源编辑后统一变为"手动录入"
-- 工号与姓名字段支持双向联动查询
+或使用 `pnpm`：
 
-### 操作日志
-- 分页支持预设条数和自定义输入
+```powershell
+pnpm install
+```
 
-### 账号管理
-- 不能停用当前登录账号
+### 2. 环境变量
 
-## 注意事项
+参考 [\.env.example](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-frontend/.env.example)：
 
-- 本项目原为 Figma Make 环境开发，已移除 `figma:asset` 相关依赖以支持本地运行
-- 所有的图片和头像已替换为渐变背景或占位符
-- 凭证上传为前端模拟，未连接真实后端
+```env
+VITE_API_BASE_URL=http://localhost:8080
+VITE_API_DEV_USERNAME=user1
+VITE_API_DEV_PASSWORD=123456
+```
 
-## 许可证
+当前前端真正使用的是：
 
-MIT
+- `VITE_API_BASE_URL`
+
+后两个开发账号变量目前可以保留，但不是主流程必需项。
+
+### 3. 启动开发环境
+
+```powershell
+npm run dev
+```
+
+默认访问地址：
+
+- 前端：`http://localhost:5173`
+
+### 4. 构建生产包
+
+```powershell
+npm run build
+```
+
+## 接口联调说明
+
+默认通过环境变量访问后端：
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+```
+
+常见联调前提：
+
+- 后端已启动在 `8080`
+- 后端已允许 `http://localhost:5173` 跨域
+- 登录成功后会自动保存 token
+- token 失效会自动清理并跳转回登录页
+
+## 视觉说明
+
+这一版前端已经做了第一轮视觉整理：
+
+- 首页增加了趋势图和状态分布图
+- 项目列表增加了概览卡片和趋势图
+- 月度汇总增加了费用结构图
+- 登录页增加了品牌 Logo 和插画
+
+整体风格保持：
+
+- 浅色背景
+- 卡片式布局
+- 低饱和强调色
+- 偏商务、偏管理系统的视觉方向
+
+## 适用阶段
+
+当前版本适合：
+
+- 内部联调测试
+- 小伙伴试用
+- 老师演示
+- 甲方前的第一版确认
+
+如果后面进入第二轮迭代，建议继续补：
+
+- 更多数据可视化
+- 页面文案统一
+- 细节交互和异常提示优化
