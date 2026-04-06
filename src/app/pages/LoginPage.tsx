@@ -1,27 +1,11 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { fetchCurrentUser, login } from "../api/auth";
+import homeIllustration from "../assets/home.png";
+import { BrandLogo } from "../components/BrandLogo";
 import { readStoredToken } from "../api/http";
 
 const featureItems = ["轻量高效", "审计友好", "政策对齐", "责任可溯"];
-
-function LogoMark() {
-  return (
-    <div className="relative flex h-[58px] w-[58px] items-center justify-center rounded-[18px] bg-[#1a1d1f] shadow-[0_18px_40px_rgba(39,43,48,0.18)]">
-      <div className="grid grid-cols-3 gap-[5px]">
-        <span className="h-[8px] w-[8px] rounded-full bg-white" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/70" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/45" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/55" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/75" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/35" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white/65" />
-        <span className="h-[8px] w-[8px] rounded-full bg-white" />
-      </div>
-    </div>
-  );
-}
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -105,7 +89,7 @@ export function LoginPage() {
           </div>
 
           <div className="relative z-[1] flex items-center gap-[14px]">
-            <LogoMark />
+            <BrandLogo size={58} />
             <div>
               <p className="text-[14px] font-semibold tracking-[0.06em] text-[#1a1d1f]">研发费用合规</p>
               <p className="text-[20px] font-semibold tracking-[0.02em] text-[#1a1d1f]">智能管理系统</p>
@@ -114,14 +98,13 @@ export function LoginPage() {
 
           <div className="relative z-[1] flex flex-1 flex-col justify-center">
             <div className="rounded-[28px] border border-white/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.88),rgba(248,249,251,0.68))] px-[28px] py-[30px] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_24px_48px_rgba(26,29,31,0.06)]">
-              <div className="mb-[28px] flex h-[220px] items-center justify-center rounded-[24px] border border-dashed border-[#d9dde3] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_50%,#edf1f5_100%)]">
-                <div className="text-center">
-                  <div className="mx-auto mb-[14px] flex h-[68px] w-[68px] items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#2a85ff,#0058d8)] text-[28px] text-white shadow-[0_18px_30px_rgba(42,133,255,0.28)]">
-                    研
-                  </div>
-                  <p className="text-[14px] font-medium text-[#6f767e]">登录页插画占位区</p>
-                  <p className="mt-[6px] text-[12px] text-[#9a9fa5]">你后面放入素材后我再替换</p>
-                </div>
+              <div className="mb-[28px] overflow-hidden rounded-[24px] border border-dashed border-[#d9dde3] bg-[linear-gradient(135deg,#ffffff_0%,#eef4ff_50%,#edf1f5_100%)]">
+                <img
+                  src={homeIllustration}
+                  alt="系统登录页插画"
+                  className="h-[220px] w-full object-cover object-center"
+                  draggable={false}
+                />
               </div>
 
               <p className="text-[40px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#1a1d1f]">智能管理</p>
@@ -147,7 +130,7 @@ export function LoginPage() {
         <main className="flex flex-1 flex-col bg-[#fcfcfc] px-[22px] py-[24px] sm:px-[34px] sm:py-[30px] lg:px-[48px]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-[12px] lg:hidden">
-              <LogoMark />
+              <BrandLogo size={52} />
               <div>
                 <p className="text-[13px] font-semibold text-[#1a1d1f]">研发费用合规</p>
                 <p className="text-[18px] font-semibold text-[#1a1d1f]">智能管理系统</p>

@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import svgPaths from "../../imports/svg-i12ofgoty4";
 import { fetchCurrentUser, logout, type CurrentUser } from "../api/auth";
 import { clearStoredToken, readStoredToken } from "../api/http";
+import { BrandLogo } from "./BrandLogo";
 
 function IconHome({ active }: { active?: boolean }) {
   const color = active ? "#272b30" : "#6F767E";
@@ -292,24 +293,7 @@ export function Layout() {
       <div className="sticky top-0 flex h-screen w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
         <div className="flex flex-1 flex-col gap-[32px] px-[20px] py-[24px]">
           <div className="flex items-center gap-[12px] px-[4px]">
-            <div className="relative size-[40px] shrink-0">
-              <svg className="absolute block size-full" fill="none" preserveAspectRatio="none" viewBox="0 0 48 48">
-                <path d={svgPaths.p36aee800} fill="#272B30" />
-                <rect fill="url(#sb_g0)" height="8" rx="2" width="4" x="14" y="20" />
-                <rect fill="white" height="12" rx="2" width="4" x="22" y="18" />
-                <rect fill="url(#sb_g1)" height="8" rx="2" width="4" x="30" y="20" />
-                <defs>
-                  <linearGradient id="sb_g0" x1="16" x2="16" y1="20" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="white" />
-                    <stop offset="1" stopColor="#D0D0D0" />
-                  </linearGradient>
-                  <linearGradient id="sb_g1" x1="32" x2="32" y1="20" y2="28" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="white" />
-                    <stop offset="1" stopColor="#D0D0D0" />
-                  </linearGradient>
-                </defs>
-              </svg>
-            </div>
+            <BrandLogo size={40} />
             <p className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[20px] tracking-[-0.1px] text-[#272b30]">
               研发费用合规
               <br />

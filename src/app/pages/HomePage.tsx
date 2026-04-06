@@ -1,7 +1,7 @@
 import { ArrowRight, BarChart3, BriefcaseBusiness, ClipboardList, Cpu, ReceiptText, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { fetchDevices } from "../api/devices";
 import { fetchEmployees } from "../api/employees";
 import { fetchProjectMonthlyList, type ProjectMonthlyRecord } from "../api/monthly";
