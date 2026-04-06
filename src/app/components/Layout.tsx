@@ -289,7 +289,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-screen w-full bg-[#f4f4f4]">
-      <div className="flex min-h-screen w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
+      <div className="sticky top-0 flex h-screen w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
         <div className="flex flex-1 flex-col gap-[32px] px-[20px] py-[24px]">
           <div className="flex items-center gap-[12px] px-[4px]">
             <div className="relative size-[40px] shrink-0">
