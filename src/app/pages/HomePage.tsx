@@ -2,6 +2,7 @@ import { ArrowRight, BarChart3, BriefcaseBusiness, ClipboardList, Cpu, ReceiptTe
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { downloadCompanyWageWorkbook } from "../api/audit-exports";
 import { fetchDevices } from "../api/devices";
 import { fetchEmployees } from "../api/employees";
 import { fetchProjectMonthlyList, type ProjectMonthlyRecord } from "../api/monthly";
@@ -194,6 +195,10 @@ export function HomePage() {
   const [trendData, setTrendData] = useState<TrendChartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [companyExportStartMonth, setCompanyExportStartMonth] = useState("2024-01");
+  const [companyExportEndMonth, setCompanyExportEndMonth] = useState("2024-10");
+  const [exportingCompanyWorkbook, setExportingCompanyWorkbook] = useState(false);
+  const [companyExportError, setCompanyExportError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -255,6 +260,18 @@ export function HomePage() {
       cancelled = true;
     };
   }, []);
+
+  async function handleCompanyWorkbookExport() {
+    setCompanyExportError("");
+    setExportingCompanyWorkbook(true);
+    try {
+      await downloadCompanyWageWorkbook(companyExportStartMonth, companyExportEndMonth);
+    } catch (exportError) {
+      setCompanyExportError(exportError instanceof Error ? exportError.message : "导出失败");
+    } finally {
+      setExportingCompanyWorkbook(false);
+    }
+  }
 
   const statCards = useMemo(
     () => [
@@ -458,6 +475,48 @@ export function HomePage() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="mb-[24px] rounded-[20px] bg-white p-[24px] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+        <div className="mb-[18px] flex items-center justify-between gap-[16px]">
+          <div>
+            <h2 className="text-[18px] font-semibold text-[#272b30]">公司级审计导出</h2>
+            <p className="mt-[4px] text-[13px] text-[#8c8f94]">按时间范围导出公司研发工资明细表，适合直接联调和校验导出结果。</p>
+          </div>
+          <button
+            onClick={() => void handleCompanyWorkbookExport()}
+            disabled={exportingCompanyWorkbook}
+            className="inline-flex h-[42px] items-center rounded-[12px] bg-[#272b30] px-[16px] text-[13px] font-semibold text-white disabled:opacity-50"
+          >
+            {exportingCompanyWorkbook ? "导出中..." : "导出工资明细表"}
+          </button>
+        </div>
+        <div className="mb-[16px] grid grid-cols-1 gap-[12px] md:grid-cols-[180px_180px_1fr]">
+          <div className="flex flex-col gap-[6px]">
+            <label className="text-[12px] font-medium text-[#6f767e]">开始月份</label>
+            <input
+              type="month"
+              value={companyExportStartMonth}
+              onChange={(event) => setCompanyExportStartMonth(event.target.value)}
+              className="h-[42px] rounded-[12px] border border-[#efefef] bg-[#f7f8fa] px-[12px] text-[13px] text-[#272b30] outline-none"
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <label className="text-[12px] font-medium text-[#6f767e]">结束月份</label>
+            <input
+              type="month"
+              value={companyExportEndMonth}
+              onChange={(event) => setCompanyExportEndMonth(event.target.value)}
+              className="h-[42px] rounded-[12px] border border-[#efefef] bg-[#f7f8fa] px-[12px] text-[13px] text-[#272b30] outline-none"
+            />
+          </div>
+          <div className="flex items-end text-[12px] text-[#8c8f94]">默认按当前登录用户所属公司导出。</div>
+        </div>
+        {companyExportError ? (
+          <div className="rounded-[12px] border border-[#ffd8bf] bg-[#fff7e6] px-[12px] py-[10px] text-[12px] text-[#d46b08]">
+            {companyExportError}
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-[20px] bg-white p-[24px] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">

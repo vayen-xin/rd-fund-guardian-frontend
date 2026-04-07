@@ -1,7 +1,8 @@
-import { CalendarRange, CircleDashed, ClipboardCheck, FolderKanban, Search } from "lucide-react";
+import { CalendarRange, CircleDashed, ClipboardCheck, FileSpreadsheet, FolderArchive, FolderKanban, Search } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { downloadAuditPackage, downloadAuditWorkbook, downloadProjectLedger } from "../api/audit-exports";
 import {
   endProject,
   fetchProjectDetail,
@@ -98,6 +99,47 @@ function ProjectDetailModal({
   error: string;
   onClose: () => void;
 }) {
+  const [exportYear, setExportYear] = useState(new Date().getFullYear());
+  const [ledgerStartMonth, setLedgerStartMonth] = useState("2024-01");
+  const [ledgerEndMonth, setLedgerEndMonth] = useState("2024-10");
+  const [exportingType, setExportingType] = useState<"workbook" | "package" | null>(null);
+  const [exportingLedger, setExportingLedger] = useState(false);
+  const [exportError, setExportError] = useState("");
+
+  async function handleExport(type: "workbook" | "package") {
+    if (!project) {
+      return;
+    }
+    setExportError("");
+    setExportingType(type);
+    try {
+      if (type === "workbook") {
+        await downloadAuditWorkbook(project.id, exportYear);
+      } else {
+        await downloadAuditPackage(project.id, exportYear);
+      }
+    } catch (downloadError) {
+      setExportError(downloadError instanceof Error ? downloadError.message : "导出失败");
+    } finally {
+      setExportingType(null);
+    }
+  }
+
+  async function handleLedgerExport() {
+    if (!project) {
+      return;
+    }
+    setExportError("");
+    setExportingLedger(true);
+    try {
+      await downloadProjectLedger(project.id, ledgerStartMonth, ledgerEndMonth);
+    } catch (downloadError) {
+      setExportError(downloadError instanceof Error ? downloadError.message : "导出失败");
+    } finally {
+      setExportingLedger(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/35" onClick={onClose} />
@@ -195,6 +237,77 @@ function ProjectDetailModal({
                   </div>
                 </PanelCard>
               </div>
+
+              <PanelCard>
+                <div className="border-b border-[#f2f3f5] px-[24px] py-[18px]">
+                  <h3 className="text-[16px] font-semibold text-[#272b30]">审计导出</h3>
+                  <p className="mt-[4px] text-[12px] text-[#8c8f94]">按年度导出审计 Excel 或完整材料包，方便测试和交付。</p>
+                </div>
+                <div className="flex flex-wrap items-end gap-[12px] p-[24px]">
+                  <div className="flex min-w-[180px] flex-col gap-[6px]">
+                    <label className="text-[12px] font-medium text-[#6f767e]">导出年份</label>
+                    <input
+                      type="number"
+                      min={2000}
+                      max={2100}
+                      value={exportYear}
+                      onChange={(event) => setExportYear(Number(event.target.value) || new Date().getFullYear())}
+                      className="h-[42px] rounded-[12px] border border-[#efefef] bg-[#f7f8fa] px-[12px] text-[13px] text-[#272b30] outline-none"
+                    />
+                  </div>
+                  <button
+                    onClick={() => void handleExport("workbook")}
+                    disabled={!project || exportingType != null}
+                    className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] border border-[#d8dce3] bg-white px-[14px] text-[13px] font-semibold text-[#272b30] disabled:opacity-50"
+                  >
+                    <FileSpreadsheet size={16} />
+                    {exportingType === "workbook" ? "???..." : "???? Excel"}
+                  </button>
+                  <button
+                    onClick={() => void handleExport("package")}
+                    disabled={!project || exportingType != null}
+                    className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] bg-[#272b30] px-[14px] text-[13px] font-semibold text-white disabled:opacity-50"
+                  >
+                    <FolderArchive size={16} />
+                    {exportingType === "package" ? "???..." : "???????"}
+                  </button>
+                  <div className="basis-full grid grid-cols-1 gap-[12px] rounded-[14px] border border-[#eef1f4] bg-[#fafbfc] p-[14px] xl:grid-cols-[180px_180px_auto]">
+                    <div className="flex flex-col gap-[6px]">
+                      <label className="text-[12px] font-medium text-[#6f767e]">辅助账开始月份</label>
+                      <input
+                        type="month"
+                        value={ledgerStartMonth}
+                        onChange={(event) => setLedgerStartMonth(event.target.value)}
+                        className="h-[42px] rounded-[12px] border border-[#efefef] bg-white px-[12px] text-[13px] text-[#272b30] outline-none"
+                      />
+                    </div>
+                    <div className="flex flex-col gap-[6px]">
+                      <label className="text-[12px] font-medium text-[#6f767e]">辅助账结束月份</label>
+                      <input
+                        type="month"
+                        value={ledgerEndMonth}
+                        onChange={(event) => setLedgerEndMonth(event.target.value)}
+                        className="h-[42px] rounded-[12px] border border-[#efefef] bg-white px-[12px] text-[13px] text-[#272b30] outline-none"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={() => void handleLedgerExport()}
+                        disabled={!project || exportingLedger || normalizeStatus(project.status) === "杩涜涓?"}
+                        className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] border border-[#d8dce3] bg-white px-[14px] text-[13px] font-semibold text-[#272b30] disabled:opacity-50"
+                      >
+                        <FileSpreadsheet size={16} />
+                        {exportingLedger ? "导出中..." : "导出研发支出辅助账"}
+                      </button>
+                    </div>
+                  </div>
+                  {exportError ? (
+                    <div className="basis-full rounded-[12px] border border-[#ffd8bf] bg-[#fff7e6] px-[12px] py-[10px] text-[12px] text-[#d46b08]">
+                      {exportError}
+                    </div>
+                  ) : null}
+                </div>
+              </PanelCard>
 
               <PanelCard>
                 <div className="border-b border-[#f2f3f5] px-[24px] py-[18px]">
