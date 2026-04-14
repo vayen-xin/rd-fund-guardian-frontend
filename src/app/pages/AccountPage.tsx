@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchCurrentUser, type CurrentUser } from "../api/auth";
+import { fetchSystemLogs, type SystemLogRecord } from "../api/logs";
 import {
   createAccount,
   fetchAccounts,
@@ -28,6 +30,37 @@ const EMPTY_CREATE_FORM: CreateForm = {
   name: "",
   role: "user",
 };
+
+type LoginTrendPoint = {
+  date: string;
+  count: number;
+};
+
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildRecentDates(days: number) {
+  const result: string[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    result.push(formatDateKey(date));
+  }
+  return result;
+}
+
+function isLoginLog(record: SystemLogRecord) {
+  const action = record.action || "";
+  const module = record.module || "";
+  const details = record.details || "";
+  return action.includes("登录") || details.includes("/api/auth/login") || (module.includes("认证") && action.includes("登录"));
+}
 
 function getRoleLabel(role?: string) {
   switch (role) {
@@ -215,6 +248,8 @@ export function AccountPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [createForm, setCreateForm] = useState<CreateForm>(EMPTY_CREATE_FORM);
   const [profileForm, setProfileForm] = useState<ProfileForm>({ name: "", email: "", phone: "" });
+  const [loginTrend, setLoginTrend] = useState<LoginTrendPoint[]>([]);
+  const [loginTrendLoading, setLoginTrendLoading] = useState(false);
 
   const canManageAccounts = currentUser?.role === "admin" || currentUser?.role === "branch_admin";
 
@@ -244,6 +279,52 @@ export function AccountPage() {
     void loadData();
   }, [keyword]);
 
+  useEffect(() => {
+    const rangeDates = buildRecentDates(7);
+    const startDate = rangeDates[0];
+    const endDate = rangeDates[rangeDates.length - 1];
+    let cancelled = false;
+
+    async function loadLoginTrend() {
+      setLoginTrendLoading(true);
+      try {
+        const size = 200;
+        const firstPage = await fetchSystemLogs({ page: 1, size, startDate, endDate });
+        let records = [...firstPage.records];
+        const totalPages = Math.min(5, Math.ceil(firstPage.total / size));
+        for (let page = 2; page <= totalPages; page += 1) {
+          const nextPage = await fetchSystemLogs({ page, size, startDate, endDate });
+          records = records.concat(nextPage.records);
+        }
+
+        const countMap = new Map<string, number>();
+        records.filter(isLoginLog).forEach((record) => {
+          if (!record.createdAt) return;
+          const dateKey = String(record.createdAt).slice(0, 10);
+          countMap.set(dateKey, (countMap.get(dateKey) ?? 0) + 1);
+        });
+
+        const nextTrend = rangeDates.map((date) => ({ date, count: countMap.get(date) ?? 0 }));
+        if (!cancelled) {
+          setLoginTrend(nextTrend);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoginTrend([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoginTrendLoading(false);
+        }
+      }
+    }
+
+    void loadLoginTrend();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const visibleAccounts = useMemo(() => {
     const scopedAccounts = canManageAccounts ? accounts : accounts.filter((item) => item.id === currentUser?.id);
     const search = keyword.trim().toLowerCase();
@@ -252,6 +333,8 @@ export function AccountPage() {
       [item.username, item.name, item.role].filter(Boolean).some((value) => String(value).toLowerCase().includes(search)),
     );
   }, [accounts, canManageAccounts, currentUser?.id, keyword]);
+
+  const activityTrend = useMemo(() => loginTrend.map((item) => ({ month: item.date.slice(5), count: item.count })), [loginTrend]);
 
   const handleCreate = async () => {
     if (!createForm.username.trim() || !createForm.password.trim() || !createForm.name.trim()) {
@@ -370,6 +453,40 @@ export function AccountPage() {
             </div>
           </div>
         ) : null}
+
+        <div className="rounded-[16px] bg-[#fcfcfc] p-[22px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+          <div className="mb-[14px] flex items-center justify-between">
+            <div>
+              <div className="text-[16px] font-semibold text-[#272b30]">账号登录趋势</div>
+              <div className="mt-[2px] text-[12px] text-[#9a9fa5]">统计近 7 天的登录次数</div>
+            </div>
+            <div className="text-[12px] text-[#9a9fa5]">最近 7 天</div>
+          </div>
+          <div className="h-[190px]">
+            {loginTrendLoading ? (
+              <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                登录趋势加载中...
+              </div>
+            ) : activityTrend.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={activityTrend} margin={{ top: 6, right: 16, left: -10, bottom: 0 }}>
+                  <CartesianGrid stroke="#eef1f4" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    formatter={(value: number) => [`${value} 次`, "登录次数"]}
+                    contentStyle={{ borderRadius: 12, border: "1px solid #eef1f4", boxShadow: "0 14px 34px rgba(15,23,42,0.12)" }}
+                  />
+                  <Line type="monotone" dataKey="count" stroke="#16a085" strokeWidth={2.4} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                暂无可展示趋势
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="overflow-hidden rounded-[16px] bg-[#fcfcfc] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
           <div className="overflow-x-auto">

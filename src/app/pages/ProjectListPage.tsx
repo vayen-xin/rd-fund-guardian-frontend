@@ -28,6 +28,13 @@ type TrendItem = {
   count: number;
 };
 
+type SummaryItem = {
+  label: string;
+  value: number;
+  color: string;
+  track: string;
+};
+
 function normalizeStatus(status?: string): UiProjectStatus {
   switch (status) {
     case "settled":
@@ -86,6 +93,36 @@ function PanelCard({ children }: { children: ReactNode }) {
 
 function StatusBadge({ status }: { status: UiProjectStatus }) {
   return <span className={`inline-flex h-[28px] items-center rounded-[999px] px-[10px] text-[12px] font-semibold ${getStatusBadgeClass(status)}`}>{status}</span>;
+}
+
+function SummaryStrip({ total, items }: { total: number; items: SummaryItem[] }) {
+  const safeTotal = Math.max(1, total);
+  return (
+    <div className="rounded-[18px] bg-[#fafbfc] p-[18px]">
+      <div className="flex flex-wrap items-center justify-between gap-[12px]">
+        <div>
+          <div className="text-[13px] text-[#8c8f94]">项目汇总</div>
+          <div className="mt-[6px] text-[22px] font-semibold text-[#272b30]">{total}</div>
+        </div>
+        <div className="flex flex-wrap gap-[12px]">
+          {items.map((item) => (
+            <div key={item.label} className="min-w-[120px]">
+              <div className="flex items-center justify-between text-[12px] text-[#8c8f94]">
+                <span>{item.label}</span>
+                <span className="font-semibold text-[#272b30]">{item.value}</span>
+              </div>
+              <div className="mt-[6px] h-[6px] rounded-full" style={{ backgroundColor: item.track }}>
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${Math.min(100, (item.value / safeTotal) * 100)}%`, backgroundColor: item.color }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ProjectDetailModal({
@@ -483,6 +520,16 @@ function ProjectListMain() {
               </div>
               <div className="mt-[10px] text-[30px] font-semibold text-[#272b30]">{summary.settled}</div>
             </div>
+          </div>
+          <div className="px-[22px] pb-[22px]">
+            <SummaryStrip
+              total={projects.length}
+              items={[
+                { label: "进行中", value: summary.ongoing, color: "#2bb673", track: "#e8f7ef" },
+                { label: "已结束", value: summary.ended, color: "#f0b429", track: "#fff3d6" },
+                { label: "已结算", value: summary.settled, color: "#4f6bed", track: "#e8ecff" },
+              ]}
+            />
           </div>
         </PanelCard>
 

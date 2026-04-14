@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   createEmployee,
   deleteEmployee,
@@ -7,6 +8,8 @@ import {
   type EmployeePayload,
   type EmployeeRecord,
 } from "../api/employees";
+import { fetchAttendance } from "../api/attendance";
+import { fetchAllProjects, fetchProjectDetail } from "../api/projects";
 
 type FormState = EmployeePayload;
 
@@ -20,6 +23,25 @@ const EMPTY_FORM: FormState = {
   email: "",
   entryDate: "",
 };
+
+type ParticipationBucket = {
+  label: string;
+  value: number;
+};
+
+type ActiveEmployee = {
+  name: string;
+  hours: number;
+};
+
+function getRecentRange(days: number) {
+  const end = new Date();
+  end.setHours(0, 0, 0, 0);
+  const start = new Date(end);
+  start.setDate(end.getDate() - (days - 1));
+  const toIso = (date: Date) => date.toISOString().slice(0, 10);
+  return { start: toIso(start), end: toIso(end) };
+}
 
 function EmployeeModal({
   title,
@@ -155,6 +177,10 @@ export function PersonnelPage() {
   const [deletingEmployee, setDeletingEmployee] = useState<EmployeeRecord | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [participationData, setParticipationData] = useState<ParticipationBucket[]>([]);
+  const [participationLoading, setParticipationLoading] = useState(false);
+  const [activeEmployees, setActiveEmployees] = useState<ActiveEmployee[]>([]);
+  const [activeLoading, setActiveLoading] = useState(false);
 
   async function loadEmployees() {
     setLoading(true);
@@ -170,6 +196,124 @@ export function PersonnelPage() {
 
   useEffect(() => {
     void loadEmployees();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadParticipation() {
+      if (!employees.length) {
+        setParticipationData([]);
+        return;
+      }
+      setParticipationLoading(true);
+      try {
+        const projectPage = await fetchAllProjects();
+        const details = await Promise.all(projectPage.records.map((project) => fetchProjectDetail(project.id)));
+        const countMap = new Map<string, number>();
+        const nameMap = new Map<string, string>();
+
+        employees.forEach((employee) => {
+          if (employee.employeeId) {
+            nameMap.set(employee.employeeId, employee.name);
+          }
+        });
+
+        details.forEach((detail) => {
+          detail.employees.forEach((emp) => {
+            const key = emp.employeeId ? String(emp.employeeId) : emp.employeeName;
+            if (!key) return;
+            countMap.set(key, (countMap.get(key) ?? 0) + 1);
+            if (!nameMap.has(key)) {
+              nameMap.set(key, emp.employeeName);
+            }
+          });
+        });
+
+        let zero = 0;
+        let one = 0;
+        let two = 0;
+        let threePlus = 0;
+        employees.forEach((employee) => {
+          const key = employee.employeeId || "";
+          const count = key ? countMap.get(key) ?? 0 : 0;
+          if (count <= 0) {
+            zero += 1;
+          } else if (count === 1) {
+            one += 1;
+          } else if (count === 2) {
+            two += 1;
+          } else {
+            threePlus += 1;
+          }
+        });
+
+        if (!cancelled) {
+          setParticipationData([
+            { label: "未参与", value: zero },
+            { label: "1 个项目", value: one },
+            { label: "2 个项目", value: two },
+            { label: "3+ 项目", value: threePlus },
+          ]);
+        }
+      } catch {
+        if (!cancelled) {
+          setParticipationData([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setParticipationLoading(false);
+        }
+      }
+    }
+    void loadParticipation();
+    return () => {
+      cancelled = true;
+    };
+  }, [employees]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadActive() {
+      setActiveLoading(true);
+      try {
+        const range = getRecentRange(30);
+        let pageIndex = 1;
+        const pageSize = 2000;
+        const totals = new Map<string, ActiveEmployee>();
+        while (!cancelled) {
+          const response = await fetchAttendance({ page: pageIndex, size: pageSize, startDate: range.start, endDate: range.end });
+          response.list.forEach((record) => {
+            const key = record.employeeId || record.name;
+            if (!key) return;
+            const current = totals.get(key) ?? { name: record.name || record.employeeId, hours: 0 };
+            current.hours += Number(record.duration || 0);
+            totals.set(key, current);
+          });
+          if (response.list.length < pageSize) break;
+          pageIndex += 1;
+        }
+
+        const sorted = [...totals.values()]
+          .filter((item) => item.hours > 0)
+          .sort((a, b) => b.hours - a.hours)
+          .slice(0, 10);
+        if (!cancelled) {
+          setActiveEmployees(sorted);
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveEmployees([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setActiveLoading(false);
+        }
+      }
+    }
+    void loadActive();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filteredEmployees = useMemo(() => {
@@ -268,6 +412,76 @@ export function PersonnelPage() {
           <button type="button" onClick={openCreate} className="h-[40px] rounded-[10px] bg-[#272b30] px-[16px] text-[13px] font-semibold text-white">
             新增员工
           </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-[20px] xl:grid-cols-2">
+          <div className="rounded-[16px] bg-[#fcfcfc] p-[22px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="mb-[12px] flex items-center justify-between">
+              <div>
+                <div className="text-[16px] font-semibold text-[#272b30]">员工参与项目分布</div>
+                <div className="mt-[2px] text-[12px] text-[#9a9fa5]">统计每位员工参与的项目数量</div>
+              </div>
+              <div className="text-[12px] text-[#9a9fa5]">当前员工</div>
+            </div>
+            <div className="h-[220px]">
+              {participationLoading ? (
+                <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                  分布数据加载中...
+                </div>
+              ) : participationData.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={participationData} margin={{ top: 6, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid stroke="#eef1f4" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      formatter={(value: number) => [`${value} 人`, "员工数量"]}
+                      contentStyle={{ borderRadius: 12, border: "1px solid #eef1f4", boxShadow: "0 14px 34px rgba(15,23,42,0.12)" }}
+                    />
+                    <Bar dataKey="value" fill="#4f6bed" radius={[8, 8, 0, 0]} maxBarSize={48} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                  暂无可展示分布
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-[16px] bg-[#fcfcfc] p-[22px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+            <div className="mb-[12px] flex items-center justify-between">
+              <div>
+                <div className="text-[16px] font-semibold text-[#272b30]">近 30 天工时 Top10</div>
+                <div className="mt-[2px] text-[12px] text-[#9a9fa5]">按打卡时长汇总员工活跃度</div>
+              </div>
+              <div className="text-[12px] text-[#9a9fa5]">最近 30 天</div>
+            </div>
+            <div className="h-[220px]">
+              {activeLoading ? (
+                <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                  活跃度加载中...
+                </div>
+              ) : activeEmployees.length ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={activeEmployees} layout="vertical" margin={{ top: 6, right: 16, left: 30, bottom: 0 }}>
+                    <CartesianGrid stroke="#eef1f4" horizontal={false} />
+                    <XAxis type="number" tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                    <YAxis type="category" dataKey="name" tick={{ fill: "#8c8f94", fontSize: 12 }} width={90} tickLine={false} axisLine={false} />
+                    <Tooltip
+                      formatter={(value: number) => [`${Number(value || 0).toFixed(1)} 小时`, "工时"]}
+                      contentStyle={{ borderRadius: 12, border: "1px solid #eef1f4", boxShadow: "0 14px 34px rgba(15,23,42,0.12)" }}
+                    />
+                    <Bar dataKey="hours" fill="#2bb673" radius={[0, 8, 8, 0]} maxBarSize={18} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                  暂无可展示活跃度
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="overflow-hidden rounded-[16px] bg-[#fcfcfc] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">

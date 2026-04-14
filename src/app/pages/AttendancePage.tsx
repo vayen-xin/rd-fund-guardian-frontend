@@ -31,6 +31,37 @@ const EMPTY_FORM: FormState = {
   duration: "",
 };
 
+function getMonthRange(month: string) {
+  if (!month) {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    month = ym;
+  }
+  const [yearText, monthText] = month.split("-");
+  const year = Number(yearText);
+  const monthIndex = Number(monthText) - 1;
+  const startDate = new Date(year, monthIndex, 1);
+  const endDate = new Date(year, monthIndex + 1, 0);
+  const toIso = (date: Date) => date.toISOString().slice(0, 10);
+  return {
+    start: toIso(startDate),
+    end: toIso(endDate),
+    days: endDate.getDate(),
+    firstDay: startDate.getDay(),
+  };
+}
+
+function buildCalendarGrid(days: number, firstDay: number) {
+  const cells: (number | null)[] = Array.from({ length: firstDay }, () => null);
+  for (let day = 1; day <= days; day += 1) {
+    cells.push(day);
+  }
+  while (cells.length % 7 !== 0) {
+    cells.push(null);
+  }
+  return cells;
+}
+
 function formatSource(source?: string) {
   return source === "系统导入" ? "系统导入" : "手动录入";
 }
@@ -260,6 +291,8 @@ export function AttendancePage() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [importMonth, setImportMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [calendarMap, setCalendarMap] = useState<Record<string, number>>({});
+  const [calendarLoading, setCalendarLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [size] = useState(10);
   const [total, setTotal] = useState(0);
@@ -327,7 +360,56 @@ export function AttendancePage() {
     void loadProjects();
   }, []);
 
+  useEffect(() => {
+    const targetMonth = importMonth;
+    if (!targetMonth) {
+      return;
+    }
+    const { start, end } = getMonthRange(targetMonth);
+    let cancelled = false;
+    async function loadCalendar() {
+      setCalendarLoading(true);
+      try {
+        const nextMap: Record<string, number> = {};
+        let pageIndex = 1;
+        const pageSize = 2000;
+        while (!cancelled) {
+          const response = await fetchAttendance({ page: pageIndex, size: pageSize, startDate: start, endDate: end });
+          response.list.forEach((item) => {
+            if (!item.date) return;
+            nextMap[item.date] = (nextMap[item.date] ?? 0) + Number(item.duration || 0);
+          });
+          if (response.list.length < pageSize) {
+            break;
+          }
+          pageIndex += 1;
+        }
+        if (!cancelled) {
+          setCalendarMap(nextMap);
+        }
+      } catch {
+        if (!cancelled) {
+          setCalendarMap({});
+        }
+      } finally {
+        if (!cancelled) {
+          setCalendarLoading(false);
+        }
+      }
+    }
+    void loadCalendar();
+    return () => {
+      cancelled = true;
+    };
+  }, [importMonth]);
+
   const totalHours = useMemo(() => records.reduce((sum, item) => sum + Number(item.duration || 0), 0), [records]);
+  const calendarMeta = useMemo(() => getMonthRange(importMonth), [importMonth]);
+  const calendarCells = useMemo(() => buildCalendarGrid(calendarMeta.days, calendarMeta.firstDay), [calendarMeta.days, calendarMeta.firstDay]);
+  const maxHours = useMemo(() => {
+    const values = Object.values(calendarMap);
+    return values.length ? Math.max(...values) : 0;
+  }, [calendarMap]);
 
   async function handleLookupByEmployeeId() {
     if (!form.employeeId.trim()) {
@@ -522,6 +604,47 @@ export function AttendancePage() {
               }}
             />
           </div>
+        </div>
+
+        <div className="rounded-[16px] bg-[#fcfcfc] p-[24px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+          <div className="mb-[14px] flex items-center justify-between">
+            <div>
+              <div className="text-[16px] font-semibold text-[#272b30]">每日研发时间统计</div>
+              <div className="mt-[2px] text-[12px] text-[#9a9fa5]">统计当月所有项目的打卡总时长</div>
+            </div>
+            <div className="text-[12px] text-[#9a9fa5]">{importMonth}</div>
+          </div>
+          {calendarLoading ? (
+            <div className="flex h-[220px] items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+              日历数据加载中...
+            </div>
+          ) : (
+            <div className="grid grid-cols-7 gap-[8px] rounded-[14px] border border-[#eef2f0] bg-white p-[12px]">
+              {["日", "一", "二", "三", "四", "五", "六"].map((label) => (
+                <div key={label} className="text-center text-[12px] text-[#8c8f94]">
+                  {label}
+                </div>
+              ))}
+              {calendarCells.map((day, index) => {
+                if (!day) {
+                  return <div key={`empty-${index}`} className="h-[68px] rounded-[10px] bg-[#f6f9f7]" />;
+                }
+                const dayKey = `${importMonth}-${String(day).padStart(2, "0")}`;
+                const hours = calendarMap[dayKey] ?? 0;
+                const intensity = maxHours ? Math.min(0.85, 0.12 + (hours / maxHours) * 0.73) : 0.08;
+                return (
+                  <div
+                    key={dayKey}
+                    className="flex h-[68px] flex-col items-center justify-center rounded-[10px] border border-[#e8efeb] text-[12px]"
+                    style={{ backgroundColor: `rgba(62, 171, 120, ${intensity})`, color: hours ? "#0f3d2e" : "#7b8a83" }}
+                  >
+                    <div className="text-[16px] font-semibold">{day}</div>
+                    <div className="text-[11px]">{hours ? `${hours.toFixed(1)}h` : "-"}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="rounded-[16px] bg-[#fcfcfc] p-[24px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">

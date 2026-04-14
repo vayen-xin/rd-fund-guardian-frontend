@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { fetchCurrentUser, type CurrentUser } from "../api/auth";
 import { fetchMonthlyDetail, fetchProjectMonthlyList, submitMonthlyDetail, type MonthlyDetail } from "../api/monthly";
 import { fetchAllProjects } from "../api/projects";
@@ -281,6 +282,18 @@ export function PendingSettlementPage() {
     return baseRows.filter((item) => item.status === filter);
   }, [currentUser?.role, filter, rows]);
 
+  const trendData = useMemo(() => {
+    const map = new Map<string, number>();
+    rows.forEach((row) => {
+      if (!row.yearMonth) return;
+      map.set(row.yearMonth, (map.get(row.yearMonth) ?? 0) + Number(row.amount || 0));
+    });
+    return [...map.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-6)
+      .map(([month, amount]) => ({ month, amount }));
+  }, [rows]);
+
   async function handleSubmit(row: SettlementRow) {
     setActing(true);
     setPageError("");
@@ -366,6 +379,36 @@ export function PendingSettlementPage() {
         {pageError ? (
           <div className="rounded-[12px] border border-[#ffd8bf] bg-[#fff7e6] px-[16px] py-[12px] text-[13px] text-[#ad6800]">{pageError}</div>
         ) : null}
+
+        <div className="rounded-[16px] bg-[#fcfcfc] p-[22px] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
+          <div className="mb-[14px] flex items-center justify-between">
+            <div>
+              <div className="text-[16px] font-semibold text-[#272b30]">月度结算金额趋势</div>
+              <div className="mt-[2px] text-[12px] text-[#9a9fa5]">只统计当前页面已加载的项目月度数据</div>
+            </div>
+            <div className="text-[12px] text-[#9a9fa5]">最近 6 个月</div>
+          </div>
+          <div className="h-[200px]">
+            {trendData.length > 1 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={trendData} margin={{ top: 6, right: 16, left: -12, bottom: 0 }}>
+                  <CartesianGrid stroke="#eef1f4" vertical={false} />
+                  <XAxis dataKey="month" tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fill: "#8c8f94", fontSize: 12 }} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    formatter={(value: number) => [`\u00a5 ${Number(value || 0).toFixed(2)}`, "结算金额"]}
+                    contentStyle={{ borderRadius: 12, border: "1px solid #eef1f4", boxShadow: "0 14px 34px rgba(15,23,42,0.12)" }}
+                  />
+                  <Line type="monotone" dataKey="amount" stroke="#4f6bed" strokeWidth={2.4} dot={{ r: 3.5 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center rounded-[14px] border border-dashed border-[#d8dce3] text-[13px] text-[#9a9fa5]">
+                当前数据不足，无法绘制趋势
+              </div>
+            )}
+          </div>
+        </div>
 
         <div className="overflow-hidden rounded-[16px] bg-[#fcfcfc] shadow-[0_1px_4px_rgba(0,0,0,0.06)]">
           <div className="overflow-x-auto">
