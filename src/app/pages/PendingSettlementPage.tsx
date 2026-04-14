@@ -174,6 +174,7 @@ function DetailModal({
 export function PendingSettlementPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [allMonths, setAllMonths] = useState(false);
   const [rows, setRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -194,7 +195,28 @@ export function PendingSettlementPage() {
       const nextRows: SettlementRow[] = [];
 
       projectPage.records.forEach((project, index) => {
-        const match = monthlyLists[index].find((item) => String(item.workMonth).slice(0, 7) === selectedMonth);
+        const list = monthlyLists[index];
+        if (!list || list.length === 0) {
+          return;
+        }
+
+        if (allMonths) {
+          const latest = [...list].sort((a, b) => String(b.workMonth).localeCompare(String(a.workMonth)))[0];
+          if (!latest) {
+            return;
+          }
+          nextRows.push({
+            projectId: project.id,
+            projectName: project.projectName,
+            yearMonth: String(latest.workMonth).slice(0, 7),
+            status: latest.status,
+            amount: Number(latest.grandTotal || 0),
+            updatedAt: latest.updatedAt,
+          });
+          return;
+        }
+
+        const match = list.find((item) => String(item.workMonth).slice(0, 7) === selectedMonth);
         if (!match) {
           return;
         }
@@ -218,7 +240,7 @@ export function PendingSettlementPage() {
 
   useEffect(() => {
     void loadPage();
-  }, [selectedMonth]);
+  }, [selectedMonth, allMonths]);
 
   useEffect(() => {
     if (!selectedRow) {
@@ -316,8 +338,17 @@ export function PendingSettlementPage() {
             type="month"
             value={selectedMonth}
             onChange={(event) => setSelectedMonth(event.target.value)}
-            className="h-[42px] rounded-[10px] border border-[#efefef] bg-[#fcfcfc] px-[12px] text-[13px] text-[#272b30] outline-none"
+            disabled={allMonths}
+            className="h-[42px] rounded-[10px] border border-[#efefef] bg-[#fcfcfc] px-[12px] text-[13px] text-[#272b30] outline-none disabled:opacity-60"
           />
+          <button
+            onClick={() => setAllMonths((value) => !value)}
+            className={`h-[42px] rounded-[10px] border px-[12px] text-[13px] font-semibold ${
+              allMonths ? "border-[#d48806] bg-[#fff4e0] text-[#d48806]" : "border-[#efefef] bg-white text-[#6f767e]"
+            }`}
+          >
+            全部月份
+          </button>
           <select
             value={filter}
             onChange={(event) => setFilter(event.target.value as "all" | "draft" | "finalized" | "settled")}

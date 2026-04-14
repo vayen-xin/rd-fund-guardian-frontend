@@ -33,7 +33,7 @@ async function downloadAuditFile(path: string, fileName: string) {
 export function downloadAuditWorkbook(projectId: number | string, year: number) {
   return downloadAuditFile(
     `/api/v1/projects/${projectId}/audit-exports/workbook?year=${year}`,
-    `附件二-研发工资明细表-${year}.xlsx`,
+    `附件二-研发工资明细表-${year}.xls`,
   );
 }
 
@@ -47,7 +47,7 @@ export function downloadAuditPackage(projectId: number | string, year: number) {
 export function downloadProjectLedger(projectId: number | string, startMonth: string, endMonth: string) {
   return downloadAuditFile(
     `/api/v1/projects/${projectId}/audit-exports/ledger?startMonth=${encodeURIComponent(startMonth)}&endMonth=${encodeURIComponent(endMonth)}`,
-    `研发支出辅助账-${startMonth}-${endMonth}.xlsx`,
+    `研发支出辅助账-${startMonth}-${endMonth}.xls`,
   );
 }
 
@@ -55,6 +55,6 @@ export function downloadCompanyWageWorkbook(startMonth: string, endMonth: string
   const companyPart = companyId == null ? "" : `&companyId=${encodeURIComponent(String(companyId))}`;
   return downloadAuditFile(
     `/api/v1/audit-exports/company-wages/workbook?startMonth=${encodeURIComponent(startMonth)}&endMonth=${encodeURIComponent(endMonth)}${companyPart}`,
-    `附件二-研发工资明细表-${startMonth}-${endMonth}.xlsx`,
+    `附件二-研发工资明细表-${startMonth}-${endMonth}.xls`,
   );
 }
