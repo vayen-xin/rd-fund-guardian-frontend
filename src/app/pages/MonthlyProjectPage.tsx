@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { fetchCurrentUser, type CurrentUser } from "../api/auth";
 import { deleteVoucherFile, downloadVoucherFile, uploadVoucherFile } from "../api/files";
@@ -33,6 +34,7 @@ type ProjectCardItem = {
   status: string;
   startDate: string;
   monthlyRecord?: ProjectMonthlyRecord;
+  monthlyDetail?: MonthlyDetail | null;
 };
 
 function getCurrentMonth() {
@@ -48,13 +50,50 @@ function normalizeFees(categories: MonthlyFeeSchemaCategory[], fees?: MonthlyFee
   if (!fees) {
     return next;
   }
+  const legacyToNewCategoryCode: Record<string, string> = {
+    direct_material: "direct",
+    direct_fuel: "direct",
+    direct_rental: "direct",
+    depreciation: "deprec",
+    long_deferred: "deprec",
+    amortization: "intangible",
+    commissioning: "equip",
+    outsourced: "outsource",
+  };
+  const categoryCodeSet = new Set(categories.map((item) => item.code));
   for (const category of categories) {
     next[category.code] = {
       systemItems: fees[category.code]?.systemItems ?? [],
       manualItems: fees[category.code]?.manualItems ?? [],
     };
   }
+  for (const [legacyCode, targetCode] of Object.entries(legacyToNewCategoryCode)) {
+    if (!categoryCodeSet.has(targetCode)) {
+      continue;
+    }
+    const legacyGroup = fees[legacyCode];
+    if (!legacyGroup) {
+      continue;
+    }
+    next[targetCode] = {
+      systemItems: [...next[targetCode].systemItems, ...(legacyGroup.systemItems ?? [])],
+      manualItems: [...next[targetCode].manualItems, ...(legacyGroup.manualItems ?? [])],
+    };
+  }
   return next;
+}
+
+function filterItemsByScope(items: MonthlyFeeSchemaCategory["items"], scope: "accounting" | "deduction" | "hightech") {
+  if (scope === "accounting") {
+    return items;
+  }
+  return items.filter((item) => {
+    const label = item.label || "";
+    if (scope === "deduction") {
+      return !label.includes("不可加计扣除");
+    }
+    return !label.includes("不可计入高新");
+  });
 }
 
 function getMonthlyStatusLabel(status?: string) {
@@ -79,6 +118,30 @@ function getMonthlyStatusClass(status?: string) {
   }
 }
 
+function getProjectStatusLabel(status?: string) {
+  switch (status) {
+    case "settled":
+    case "SETTLED":
+      return "已结算";
+    case "ended":
+    case "ENDED":
+      return "已结束";
+    default:
+      return "进行中";
+  }
+}
+
+function getProjectStatusClass(status?: string) {
+  switch (getProjectStatusLabel(status)) {
+    case "已结算":
+      return "bg-[#eef2ff] text-[#4f6bed] border border-[#d8e0ff]";
+    case "已结束":
+      return "bg-[#fff7e8] text-[#d48806] border border-[#ffe2a8]";
+    default:
+      return "bg-[#ebfff6] text-[#1f9d72] border border-[#bde9d4]";
+  }
+}
+
 function formatMoney(amount?: number) {
   return `¥ ${(amount ?? 0).toFixed(2)}`;
 }
@@ -88,6 +151,50 @@ function calculateGrandTotal(fees: MonthlyFees) {
     const groupSum = [...group.systemItems, ...group.manualItems].reduce((inner, item) => inner + Number(item.amount || 0), 0);
     return sum + groupSum;
   }, 0);
+}
+
+function calculateCategoryTotal(fees: MonthlyFees, categoryCode: string) {
+  const group = fees[categoryCode] ?? { systemItems: [], manualItems: [] };
+  return [...group.systemItems, ...group.manualItems].reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
+function countCategoryItems(fees: MonthlyFees, categoryCode: string) {
+  const group = fees[categoryCode] ?? { systemItems: [], manualItems: [] };
+  return group.systemItems.length + group.manualItems.length;
+}
+
+function getCategoryItems(fees: MonthlyFees, categoryCode: string) {
+  const group = fees[categoryCode] ?? { systemItems: [], manualItems: [] };
+  return [
+    ...group.systemItems.map((item) => ({ ...item, sourceLabel: "自动" })),
+    ...group.manualItems.map((item) => ({ ...item, sourceLabel: "手动" })),
+  ];
+}
+
+function isCorruptedChineseText(value?: string | null) {
+  if (!value) {
+    return false;
+  }
+  return /\?{2,}|\\u[0-9a-fA-F]{4}/.test(value);
+}
+
+function getFeeItemTitle(item: MonthlyFeeItem, category?: MonthlyFeeSchemaCategory) {
+  const catalogLabel = item.itemCode ? category?.items.find((option) => option.code === item.itemCode)?.label : "";
+  const candidates = [item.itemLabel, item.label, catalogLabel, item.name];
+  const cleanText = candidates.find((value) => value && !isCorruptedChineseText(value));
+  return cleanText || "手动录入费用";
+}
+
+function getFeeItemRemark(item: MonthlyFeeItem) {
+  const cleanText = [item.remark, item.formula].find((value) => value && !isCorruptedChineseText(value));
+  return cleanText || "暂无备注";
+}
+
+function getProjectPriority(project: ProjectCardItem, categoryCode?: string) {
+  const activeScore = project.status === "ended" ? 0 : 1000;
+  const detailScore = categoryCode && calculateCategoryTotal(project.monthlyDetail?.fees ?? ({} as MonthlyFees), categoryCode) > 0 ? 100 : 0;
+  const dateScore = Number(new Date(project.startDate).getTime() || 0) / 100000000000;
+  return activeScore + detailScore + dateScore + project.id / 100000;
 }
 
 const monthlyChartPalette = ["#4f6bed", "#1f9d72", "#f0a43a", "#d65db1", "#7950f2", "#00a7c4", "#f76707", "#868e96"];
@@ -311,30 +418,86 @@ function ManageSelectionModal<T>({
 }
 
 function FeeCreateModal({
-  category,
+  categories,
+  initialCategoryCode,
   onClose,
   onConfirm,
 }: {
-  category: MonthlyFeeSchemaCategory;
+  categories: MonthlyFeeSchemaCategory[];
+  initialCategoryCode: string;
   onClose: () => void;
-  onConfirm: (itemCode: string) => void;
+  onConfirm: (categoryCode: string, itemCode: string) => void;
 }) {
-  const [selectedCode, setSelectedCode] = useState(category.items[0]?.code ?? "");
+  const [scope, setScope] = useState<"accounting" | "deduction" | "hightech">("accounting");
+  const [activeCategoryCode, setActiveCategoryCode] = useState(initialCategoryCode);
+  const activeCategory = categories.find((item) => item.code === activeCategoryCode) ?? categories[0];
+  const safeActiveCategory = activeCategory ?? { code: "", label: "", items: [] };
+  const scopedItems = filterItemsByScope(activeCategory?.items ?? [], scope);
+  const [selectedCode, setSelectedCode] = useState(scopedItems[0]?.code ?? "");
+
+  useEffect(() => {
+    const firstAvailable = scopedItems[0]?.code ?? "";
+    if (!scopedItems.find((item) => item.code === selectedCode)) {
+      setSelectedCode(firstAvailable);
+    }
+  }, [scopedItems, selectedCode]);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-[420px] rounded-[18px] bg-white p-[28px] shadow-[0_12px_48px_rgba(0,0,0,0.18)]">
+      <div className="relative w-[560px] rounded-[18px] bg-white p-[28px] shadow-[0_12px_48px_rgba(0,0,0,0.18)]">
         <h3 className="text-[18px] font-semibold text-[#272b30]">新增费用条目</h3>
-        <p className="mt-[6px] text-[13px] text-[#6f767e]">{category.label}</p>
-        <div className="mt-[18px]">
+        <p className="mt-[6px] text-[13px] text-[#6f767e]">先选择口径和一级费用类型，再选择二级分类。</p>
+
+        <div className="mt-[14px] rounded-[12px] border border-[#f1f1f1] bg-[#fafafa] p-[10px]">
+          <div className="mb-[8px] text-[12px] font-medium text-[#6f767e]">口径切换</div>
+          <div className="flex gap-[8px]">
+            {[
+              { code: "accounting", label: "会计核算" },
+              { code: "deduction", label: "加计扣除" },
+              { code: "hightech", label: "高新认定" },
+            ].map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                onClick={() => setScope(item.code as "accounting" | "deduction" | "hightech")}
+                className={`h-[34px] rounded-[10px] px-[12px] text-[12px] font-semibold ${
+                  scope === item.code ? "bg-[#272b30] text-white" : "border border-[#e8e8e8] bg-white text-[#6f767e]"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-[12px] rounded-[12px] border border-[#f1f1f1] p-[10px]">
+          <div className="mb-[8px] text-[12px] font-medium text-[#6f767e]">一级费用类型</div>
+          <div className="flex flex-wrap gap-[8px]">
+            {categories.map((item) => (
+              <button
+                key={item.code}
+                type="button"
+                onClick={() => setActiveCategoryCode(item.code)}
+                className={`rounded-[999px] px-[10px] py-[6px] text-[12px] font-semibold ${
+                  safeActiveCategory.code === item.code ? "bg-[#eef5ff] text-[#1677ff]" : "bg-[#f7f7f8] text-[#6f767e]"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-[14px]">
           <label className="mb-[8px] block text-[13px] font-medium text-[#6f767e]">选择子分类</label>
           <select
             value={selectedCode}
             onChange={(event) => setSelectedCode(event.target.value)}
             className="h-[42px] w-full rounded-[10px] border border-[#efefef] bg-[#f4f4f4] px-[12px] text-[13px] text-[#272b30] outline-none"
           >
-            {category.items.map((item) => (
+            {scopedItems.length === 0 ? <option value="">当前口径下暂无可选子分类</option> : null}
+            {scopedItems.map((item) => (
               <option key={item.code} value={item.code}>
                 {item.label}
               </option>
@@ -345,7 +508,12 @@ function FeeCreateModal({
           <button type="button" onClick={onClose} className="h-[42px] flex-1 rounded-[10px] border border-[#efefef] bg-white text-[14px] font-semibold text-[#6f767e]">
             取消
           </button>
-          <button type="button" onClick={() => onConfirm(selectedCode)} className="h-[42px] flex-1 rounded-[10px] bg-[#272b30] text-[14px] font-semibold text-white">
+          <button
+            type="button"
+            onClick={() => onConfirm(safeActiveCategory.code, selectedCode)}
+            disabled={!selectedCode || !safeActiveCategory.code}
+            className="h-[42px] flex-1 rounded-[10px] bg-[#272b30] text-[14px] font-semibold text-white disabled:opacity-50"
+          >
             确认
           </button>
         </div>
@@ -358,6 +526,8 @@ function MonthlyEditorModal({
   projectName,
   detail,
   categories,
+  activeCategoryCode,
+  currentUser,
   employeePool,
   devicePool,
   saving,
@@ -367,6 +537,8 @@ function MonthlyEditorModal({
   projectName: string;
   detail: MonthlyDetail;
   categories: MonthlyFeeSchemaCategory[];
+  activeCategoryCode?: string;
+  currentUser: CurrentUser | null;
   employeePool: MonthlyEmployeeItem[];
   devicePool: MonthlyDeviceItem[];
   saving: boolean;
@@ -376,20 +548,32 @@ function MonthlyEditorModal({
   const [fees, setFees] = useState<MonthlyFees>(() => normalizeFees(categories, detail.fees));
   const [employees, setEmployees] = useState<MonthlyEmployeeItem[]>(detail.employees);
   const [devices, setDevices] = useState<MonthlyDeviceItem[]>(detail.devices);
-  const [creatingCategory, setCreatingCategory] = useState<MonthlyFeeSchemaCategory | null>(null);
+  const [creatingCategoryCode, setCreatingCategoryCode] = useState<string | null>(null);
   const [showEmployeePicker, setShowEmployeePicker] = useState(false);
   const [showDevicePicker, setShowDevicePicker] = useState(false);
   const [uploadingKey, setUploadingKey] = useState("");
+  const [manualAmountDrafts, setManualAmountDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setFees(normalizeFees(categories, detail.fees));
     setEmployees(detail.employees);
     setDevices(detail.devices);
+    setManualAmountDrafts({});
   }, [categories, detail]);
 
   const grandTotal = useMemo(() => calculateGrandTotal(fees), [fees]);
   const feeBreakdownData = useMemo(() => buildFeeBreakdownData(categories, fees), [categories, fees]);
-  const readOnly = detail.status === "settled";
+  const visibleCategories = useMemo(
+    () => (activeCategoryCode ? categories.filter((category) => category.code === activeCategoryCode) : categories),
+    [activeCategoryCode, categories],
+  );
+  const activeCategory = activeCategoryCode ? categories.find((category) => category.code === activeCategoryCode) : null;
+  const visibleTotal = useMemo(
+    () => visibleCategories.reduce((sum, category) => sum + calculateCategoryTotal(fees, category.code), 0),
+    [fees, visibleCategories],
+  );
+  const canEditSettled = ["admin", "branch_admin"].includes((currentUser?.role ?? "").toLowerCase());
+  const readOnly = detail.status === "settled" && !canEditSettled;
 
   function updateManualItem(categoryCode: string, index: number, patch: Partial<MonthlyFeeItem>) {
     setFees((prev) => {
@@ -400,7 +584,38 @@ function MonthlyEditorModal({
     });
   }
 
-  function addManualItem(category: MonthlyFeeSchemaCategory, itemCode: string) {
+  function getManualItemDraftKey(categoryCode: string, index: number) {
+    return `${categoryCode}-${index}`;
+  }
+
+  function handleManualAmountChange(categoryCode: string, index: number, rawValue: string) {
+    if (!/^\d*(\.\d{0,2})?$/.test(rawValue)) {
+      return;
+    }
+    const draftKey = getManualItemDraftKey(categoryCode, index);
+    setManualAmountDrafts((prev) => ({ ...prev, [draftKey]: rawValue }));
+    updateManualItem(categoryCode, index, { amount: rawValue === "" ? 0 : Number(rawValue) });
+  }
+
+  function handleManualAmountBlur(categoryCode: string, index: number) {
+    const draftKey = getManualItemDraftKey(categoryCode, index);
+    setManualAmountDrafts((prev) => {
+      if (!(draftKey in prev)) {
+        return prev;
+      }
+      const currentValue = prev[draftKey];
+      if (currentValue === "") {
+        return prev;
+      }
+      return { ...prev, [draftKey]: String(Number(currentValue)) };
+    });
+  }
+
+  function addManualItem(categoryCode: string, itemCode: string) {
+    const category = categories.find((item) => item.code === categoryCode);
+    if (!category) {
+      return;
+    }
     const selected = category.items.find((item) => item.code === itemCode);
     if (!selected) {
       return;
@@ -419,16 +634,32 @@ function MonthlyEditorModal({
       };
       return { ...prev, [category.code]: { ...group, manualItems: [...group.manualItems, nextItem] } };
     });
-    setCreatingCategory(null);
+    setCreatingCategoryCode(null);
   }
 
   function removeManualItem(categoryCode: string, index: number) {
+    const removedDraftKey = getManualItemDraftKey(categoryCode, index);
     setFees((prev) => {
       const group = prev[categoryCode];
       return {
         ...prev,
         [categoryCode]: { ...group, manualItems: group.manualItems.filter((_, currentIndex) => currentIndex !== index) },
       };
+    });
+    setManualAmountDrafts((prev) => {
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(prev)) {
+        if (key === removedDraftKey) {
+          continue;
+        }
+        const [currentCategoryCode, currentIndexText] = key.split("-");
+        if (currentCategoryCode === categoryCode && Number(currentIndexText) > index) {
+          next[`${currentCategoryCode}-${Number(currentIndexText) - 1}`] = value;
+          continue;
+        }
+        next[key] = value;
+      }
+      return next;
     });
   }
 
@@ -478,7 +709,7 @@ function MonthlyEditorModal({
           <div>
             <h2 className="text-[22px] font-semibold text-[#272b30]">{projectName}</h2>
             <p className="mt-[4px] text-[13px] text-[#9a9fa5]">
-              {detail.yearMonth} 月度汇总 · {getMonthlyStatusLabel(detail.status)}
+              {detail.yearMonth} {activeCategory ? activeCategory.label : "月度汇总"} · {getMonthlyStatusLabel(detail.status)}
             </p>
           </div>
           <button onClick={onClose} className="flex h-[36px] w-[36px] items-center justify-center rounded-[10px] text-[#6f767e] hover:bg-[#f4f4f4]">
@@ -492,7 +723,7 @@ function MonthlyEditorModal({
               { label: "关联员工", value: `${employees.length} 人` },
               { label: "关联设备", value: `${devices.length} 台` },
               { label: "当前状态", value: getMonthlyStatusLabel(detail.status) },
-              { label: "费用合计", value: formatMoney(grandTotal) },
+              { label: activeCategory ? "本类合计" : "费用合计", value: formatMoney(activeCategory ? visibleTotal : grandTotal) },
             ].map((item) => (
               <div key={item.label} className="rounded-[14px] bg-[#fafafa] px-[16px] py-[14px]">
                 <div className="text-[12px] text-[#9a9fa5]">{item.label}</div>
@@ -501,7 +732,7 @@ function MonthlyEditorModal({
             ))}
           </div>
 
-          <div className="mt-[20px] grid grid-cols-2 gap-[20px]">
+          {!activeCategory ? <div className="mt-[20px] grid grid-cols-2 gap-[20px]">
             <div className="rounded-[16px] border border-[#f4f4f4]">
               <div className="flex items-center justify-between border-b border-[#f4f4f4] px-[20px] py-[16px]">
                 <div className="font-semibold text-[#272b30]">当月关联员工</div>
@@ -559,13 +790,13 @@ function MonthlyEditorModal({
                 </div>
               </div>
             </div>
-          </div>
+          </div> : null}
 
-          <div className="mt-[20px] rounded-[16px] border border-[#f4f4f4] bg-white p-[20px]">
+          {!activeCategory ? <div className="mt-[20px] rounded-[16px] border border-[#f4f4f4] bg-white p-[20px]">
             <div className="mb-[14px] flex items-center justify-between">
               <div>
                 <div className="text-[16px] font-semibold text-[#272b30]">费用结构概览</div>
-                <div className="mt-[4px] text-[12px] text-[#8c8f94]">把 8 大费用分类做成比例图，方便快速看出本月支出重心。</div>
+                <div className="mt-[4px] text-[12px] text-[#8c8f94]">把费用分类做成比例图，方便快速看出本月支出重心。</div>
               </div>
               <div className="rounded-[999px] bg-[#f4f7fb] px-[10px] py-[5px] text-[12px] font-medium text-[#6f767e]">
                 合计 {formatMoney(grandTotal)}
@@ -611,12 +842,14 @@ function MonthlyEditorModal({
                 ))}
               </div>
             </div>
-          </div>
+          </div> : null}
 
           <div className="mt-[20px] rounded-[16px] border border-[#f4f4f4]">
-            <div className="border-b border-[#f4f4f4] px-[20px] py-[16px] font-semibold text-[#272b30]">费用明细</div>
+            <div className="border-b border-[#f4f4f4] px-[20px] py-[16px] font-semibold text-[#272b30]">
+              {activeCategory ? `${activeCategory.label}明细` : "费用明细"}
+            </div>
             <div className="flex flex-col gap-[16px] p-[20px]">
-              {categories.map((category) => {
+              {visibleCategories.map((category) => {
                 const group = fees[category.code] ?? { systemItems: [], manualItems: [] };
                 const systemTotal = group.systemItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
                 const manualTotal = group.manualItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -631,7 +864,7 @@ function MonthlyEditorModal({
                         </div>
                       </div>
                       {!readOnly ? (
-                        <button onClick={() => setCreatingCategory(category)} className="h-[32px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]">
+                        <button onClick={() => setCreatingCategoryCode(category.code)} className="h-[32px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]">
                           新增
                         </button>
                       ) : null}
@@ -642,8 +875,8 @@ function MonthlyEditorModal({
                         {group.systemItems.map((item, index) => (
                           <div key={`sys-${category.code}-${index}`} className="flex items-center justify-between rounded-[10px] bg-white px-[12px] py-[10px]">
                             <div>
-                              <div className="text-[13px] font-semibold text-[#272b30]">{item.itemLabel || item.label || item.name || "自动计算项"}</div>
-                              {item.formula ? <div className="mt-[3px] text-[11px] text-[#9a9fa5]">{item.formula}</div> : null}
+                              <div className="text-[13px] font-semibold text-[#272b30]">{getFeeItemTitle(item, category)}</div>
+                              {!isCorruptedChineseText(item.formula) && item.formula ? <div className="mt-[3px] text-[11px] text-[#9a9fa5]">{item.formula}</div> : null}
                             </div>
                             <div className="text-[13px] font-semibold text-[#272b30]">{formatMoney(Number(item.amount || 0))}</div>
                           </div>
@@ -659,7 +892,7 @@ function MonthlyEditorModal({
                           <div key={`manual-${category.code}-${index}`} className="grid grid-cols-[180px_1fr_160px_48px] items-start gap-[10px]">
                             <input
                               disabled
-                              value={item.itemLabel || item.label || ""}
+                              value={getFeeItemTitle(item, category)}
                               className="h-[40px] rounded-[10px] border border-[#efefef] bg-[#f5f5f5] px-[12px] text-[13px] text-[#272b30] outline-none"
                             />
                             <div className="flex flex-col gap-[8px]">
@@ -712,11 +945,12 @@ function MonthlyEditorModal({
                             </div>
                             <input
                               disabled={readOnly}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={Number(item.amount || 0)}
-                              onChange={(event) => updateManualItem(category.code, index, { amount: Number(event.target.value || 0) })}
+                              type="text"
+                              inputMode="decimal"
+                              value={manualAmountDrafts[getManualItemDraftKey(category.code, index)] ?? (Number(item.amount || 0) === 0 ? "" : String(item.amount))}
+                              onChange={(event) => handleManualAmountChange(category.code, index, event.target.value)}
+                              onBlur={() => handleManualAmountBlur(category.code, index)}
+                              placeholder="请输入金额"
                               className="h-[40px] rounded-[10px] border border-[#efefef] bg-white px-[12px] text-[13px] text-[#272b30] outline-none disabled:bg-[#f5f5f5]"
                             />
                             {!readOnly ? (
@@ -747,8 +981,13 @@ function MonthlyEditorModal({
         </div>
       </div>
 
-      {creatingCategory ? (
-        <FeeCreateModal category={creatingCategory} onClose={() => setCreatingCategory(null)} onConfirm={(itemCode) => addManualItem(creatingCategory, itemCode)} />
+      {creatingCategoryCode ? (
+        <FeeCreateModal
+          categories={activeCategory ? [activeCategory] : categories}
+          initialCategoryCode={creatingCategoryCode}
+          onClose={() => setCreatingCategoryCode(null)}
+          onConfirm={(categoryCode, itemCode) => addManualItem(categoryCode, itemCode)}
+        />
       ) : null}
 
       {showEmployeePicker ? (
@@ -791,8 +1030,12 @@ function MonthlyEditorModal({
 }
 
 export function MonthlyProjectPage() {
+  const { categoryCode } = useParams();
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [expandedProjectId, setExpandedProjectId] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectCardItem[]>([]);
   const [categories, setCategories] = useState<MonthlyFeeSchemaCategory[]>([]);
   const [employeePool, setEmployeePool] = useState<MonthlyEmployeeItem[]>([]);
@@ -802,6 +1045,20 @@ export function MonthlyProjectPage() {
   const [pageError, setPageError] = useState("");
   const [editingProject, setEditingProject] = useState<ProjectCardItem | null>(null);
   const [editingDetail, setEditingDetail] = useState<MonthlyDetail | null>(null);
+  const selectedCategory = categories.find((category) => category.code === categoryCode) ?? null;
+  const filteredProjects = projects.filter((project) => {
+    const value = `${project.name} ${project.code ?? ""} ${project.description ?? ""}`.toLowerCase();
+    return value.includes(keyword.trim().toLowerCase());
+  }).sort((left, right) => getProjectPriority(right, selectedCategory?.code) - getProjectPriority(left, selectedCategory?.code));
+  const pageSize = 5;
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / pageSize));
+  const pageProjects = filteredProjects.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const categoryTotal = selectedCategory
+    ? filteredProjects.reduce((sum, project) => sum + calculateCategoryTotal(project.monthlyDetail?.fees ?? ({} as MonthlyFees), selectedCategory.code), 0)
+    : 0;
+  const categoryItemCount = selectedCategory
+    ? filteredProjects.reduce((sum, project) => sum + countCategoryItems(project.monthlyDetail?.fees ?? ({} as MonthlyFees), selectedCategory.code), 0)
+    : 0;
 
   async function loadPage() {
     setLoading(true);
@@ -821,8 +1078,7 @@ export function MonthlyProjectPage() {
       setDevicePool(deviceOptions.map(toMonthlyDeviceFromOption));
 
       const monthlyLists = await Promise.all(projectPage.records.map((project) => fetchProjectMonthlyList(project.id)));
-      setProjects(
-        projectPage.records.map((project, index) => ({
+      const baseProjects = projectPage.records.map((project, index) => ({
           id: project.id,
           name: project.projectName,
           code: project.code,
@@ -830,8 +1086,26 @@ export function MonthlyProjectPage() {
           status: project.status,
           startDate: project.startDate,
           monthlyRecord: monthlyLists[index].find((item) => String(item.workMonth).slice(0, 7) === selectedMonth),
-        })),
-      );
+        }));
+
+      if (categoryCode) {
+        const details = await Promise.all(
+          baseProjects.map(async (project) => {
+            if (!project.monthlyRecord) {
+              return null;
+            }
+            try {
+              const detail = await fetchMonthlyDetail(project.id, selectedMonth);
+              return { ...detail, fees: normalizeFees(schema.categories, detail.fees) };
+            } catch {
+              return null;
+            }
+          }),
+        );
+        setProjects(baseProjects.map((project, index) => ({ ...project, monthlyDetail: details[index] })));
+      } else {
+        setProjects(baseProjects);
+      }
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "月度页面加载失败");
     } finally {
@@ -841,7 +1115,18 @@ export function MonthlyProjectPage() {
 
   useEffect(() => {
     void loadPage();
-  }, [selectedMonth]);
+  }, [selectedMonth, categoryCode]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setExpandedProjectId(null);
+  }, [selectedMonth, categoryCode, keyword]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   async function openEditor(project: ProjectCardItem) {
     setPageError("");
@@ -905,31 +1190,171 @@ export function MonthlyProjectPage() {
   }
 
   return (
-    <div className="flex min-h-full flex-col gap-[20px]">
-      <div className="flex items-center justify-between rounded-[20px] bg-white px-[28px] py-[24px] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+    <div className="flex min-h-full flex-col gap-[24px] p-[28px] lg:p-[36px]">
+      <div className="flex items-center justify-between rounded-[18px] bg-white px-[32px] py-[26px] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
         <div>
-          <div className="text-[24px] font-semibold text-[#272b30]">月度汇总</div>
+          <div className="text-[24px] font-semibold text-[#272b30]">{selectedCategory ? selectedCategory.label : "月度汇总"}</div>
           <div className="mt-[6px] text-[13px] text-[#8c8f94]">
-            {currentUser ? `${currentUser.name} · ${selectedMonth}` : "按月份查看项目费用与结算准备情况"}
+            {selectedCategory
+              ? "按研发支出分类维护当前月份的项目费用明细"
+              : currentUser
+                ? `${currentUser.name} · ${selectedMonth}`
+                : "按月份查看项目费用与结算准备情况"}
           </div>
         </div>
-        <label className="flex items-center gap-[10px] rounded-[12px] border border-[#efefef] bg-[#fafafa] px-[14px] py-[10px] text-[13px] text-[#6f767e]">
-          月份
-          <input
-            type="month"
-            value={selectedMonth}
-            onChange={(event) => setSelectedMonth(event.target.value)}
-            className="rounded-[8px] border border-[#efefef] bg-white px-[10px] py-[6px] text-[#272b30] outline-none"
-          />
-        </label>
+        <div className="flex items-center gap-[10px]">
+          {selectedCategory ? (
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              placeholder="查询项目名称或编号"
+              className="h-[40px] w-[220px] rounded-[12px] border border-[#efefef] bg-[#fafafa] px-[12px] text-[13px] text-[#272b30] outline-none"
+            />
+          ) : null}
+          <label className="flex items-center gap-[10px] rounded-[12px] border border-[#efefef] bg-[#fafafa] px-[14px] py-[10px] text-[13px] text-[#6f767e]">
+            月份
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(event) => setSelectedMonth(event.target.value)}
+              className="rounded-[8px] border border-[#efefef] bg-white px-[10px] py-[6px] text-[#272b30] outline-none"
+            />
+          </label>
+        </div>
       </div>
 
       {pageError ? (
         <div className="rounded-[14px] border border-[#ffd8bf] bg-[#fff7e6] px-[16px] py-[12px] text-[13px] text-[#d46b08]">{pageError}</div>
       ) : null}
 
-      {loading ? (
+      {categoryCode && !loading && !selectedCategory ? (
+        <div className="rounded-[20px] bg-white px-[28px] py-[40px] text-[14px] text-[#8c8f94] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+          暂未找到对应费用分类，请从左侧月度汇总菜单重新选择。
+        </div>
+      ) : loading ? (
         <div className="rounded-[20px] bg-white px-[28px] py-[40px] text-[14px] text-[#8c8f94] shadow-[0_16px_40px_rgba(15,23,42,0.06)]">正在加载月度项目数据...</div>
+      ) : selectedCategory ? (
+        <div className="flex flex-col gap-[16px]">
+          <div className="grid gap-[18px] md:grid-cols-3">
+            {[
+              { label: "项目数量", value: `${filteredProjects.length} 个` },
+              { label: "明细条数", value: `${categoryItemCount} 条` },
+              { label: "分类金额", value: formatMoney(categoryTotal) },
+            ].map((item) => (
+              <div key={item.label} className="rounded-[16px] bg-white px-[24px] py-[20px] shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+                <div className="text-[12px] text-[#8c8f94]">{item.label}</div>
+                <div className="mt-[8px] text-[22px] font-semibold text-[#272b30]">{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-hidden rounded-[18px] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+            <div className="grid grid-cols-[1.2fr_120px_110px_140px_120px_150px] border-b border-[#f4f4f4] bg-[#fafafa] px-[20px] py-[14px] text-[13px] font-semibold text-[#6f767e]">
+              <div>项目名称</div>
+              <div>项目编号</div>
+              <div>项目状态</div>
+              <div>本类金额</div>
+              <div>明细条数</div>
+              <div className="text-right">操作</div>
+            </div>
+            {filteredProjects.length === 0 ? (
+              <div className="px-[20px] py-[42px] text-center text-[13px] text-[#8c8f94]">暂无匹配项目</div>
+            ) : (
+              pageProjects.map((project) => {
+                const detailFees = project.monthlyDetail?.fees ?? ({} as MonthlyFees);
+                const total = calculateCategoryTotal(detailFees, selectedCategory.code);
+                const itemCount = countCategoryItems(detailFees, selectedCategory.code);
+                const categoryItems = getCategoryItems(detailFees, selectedCategory.code);
+                const expanded = expandedProjectId === project.id;
+                return (
+                  <div key={project.id} className="border-b border-[#f4f4f4] last:border-b-0">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setExpandedProjectId((value) => (value === project.id ? null : project.id))}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          setExpandedProjectId((value) => (value === project.id ? null : project.id));
+                        }
+                      }}
+                      className="grid cursor-pointer grid-cols-[1.2fr_120px_110px_140px_120px_150px] items-center px-[24px] py-[18px] transition-colors hover:bg-[#fafafa]"
+                    >
+                      <div>
+                        <div className="flex items-center gap-[8px]">
+                          <span className="text-[15px] font-semibold text-[#272b30]">{project.name}</span>
+                        </div>
+                        <div className="mt-[5px] line-clamp-1 text-[12px] text-[#9a9fa5]">{project.description || "暂无项目说明"}</div>
+                      </div>
+                      <div className="text-[13px] text-[#6f767e]">{project.code || "未设置"}</div>
+                      <div>
+                        <span className={`inline-flex h-[26px] items-center rounded-[999px] px-[9px] text-[11px] font-semibold ${getProjectStatusClass(project.status)}`}>
+                          {getProjectStatusLabel(project.status)}
+                        </span>
+                      </div>
+                      <div className="text-[14px] font-semibold text-[#272b30]">{formatMoney(total)}</div>
+                      <div className="text-[13px] text-[#6f767e]">{itemCount} 条</div>
+                      <div className="text-right">
+                        <button
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openEditor(project);
+                          }}
+                          className="h-[34px] rounded-[8px] bg-[#272b30] px-[14px] text-[12px] font-semibold text-white"
+                        >
+                          {itemCount > 0 ? "编辑明细" : "新增数据"}
+                        </button>
+                      </div>
+                    </div>
+                    {expanded ? (
+                      <div className="mx-[24px] mb-[18px] rounded-[14px] border border-[#efefef] bg-[#fcfcfc]">
+                        {categoryItems.length === 0 ? (
+                          <div className="px-[16px] py-[20px] text-[13px] text-[#8c8f94]">当前项目还没有录入本分类费用明细。</div>
+                        ) : (
+                          <div className="divide-y divide-[#efefef]">
+                            {categoryItems.map((item, index) => (
+                              <div key={`${project.id}-${item.itemCode}-${index}`} className="grid grid-cols-[120px_1fr_140px_160px] items-center gap-[12px] px-[16px] py-[12px]">
+                                <span className="w-fit rounded-[999px] bg-white px-[9px] py-[4px] text-[11px] font-semibold text-[#6f767e]">{item.sourceLabel}</span>
+                                <div className="min-w-0">
+                                  <div className="truncate text-[13px] font-semibold text-[#272b30]">{getFeeItemTitle(item, selectedCategory)}</div>
+                                  <div className="mt-[3px] truncate text-[12px] text-[#9a9fa5]">{getFeeItemRemark(item)}</div>
+                                </div>
+                                <div className="text-[13px] font-semibold text-[#272b30]">{formatMoney(Number(item.amount || 0))}</div>
+                                <div className="text-[12px] text-[#8c8f94]">{(item.vouchers?.length ?? 0) > 0 ? `${item.vouchers?.length} 个凭证` : "未上传凭证"}</div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+            {filteredProjects.length > pageSize ? (
+              <div className="flex items-center justify-between border-t border-[#f4f4f4] px-[24px] py-[16px]">
+                <div className="text-[12px] text-[#8c8f94]">
+                  共 {filteredProjects.length} 个项目 · 第 {currentPage} / {totalPages} 页
+                </div>
+                <div className="flex items-center gap-[8px]">
+                  <button
+                    disabled={currentPage <= 1}
+                    onClick={() => setCurrentPage((value) => Math.max(1, value - 1))}
+                    className="h-[34px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#6f767e] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    上一页
+                  </button>
+                  <button
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setCurrentPage((value) => Math.min(totalPages, value + 1))}
+                    className="h-[34px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#6f767e] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </div>
       ) : (
         <div className="grid gap-[16px] md:grid-cols-2 xl:grid-cols-3">
           {projects.map((project) => (
@@ -976,6 +1401,8 @@ export function MonthlyProjectPage() {
           projectName={editingProject.name}
           detail={editingDetail}
           categories={categories}
+          activeCategoryCode={selectedCategory?.code}
+          currentUser={currentUser}
           employeePool={employeePool}
           devicePool={devicePool}
           saving={saving}

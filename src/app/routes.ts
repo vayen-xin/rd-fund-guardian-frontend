@@ -28,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "projects", Component: ProjectListPage },
       { path: "projects/create", Component: CreateProjectPage },
       { path: "projects/monthly", Component: MonthlyProjectPage },
+      { path: "projects/monthly/:categoryCode", Component: MonthlyProjectPage },
       { path: "projects/pending-settlement", Component: PendingSettlementPage },
       { path: "operation-log", Component: OperationLogPage },
       { path: "accounts", Component: AccountPage },

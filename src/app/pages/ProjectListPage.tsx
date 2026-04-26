@@ -261,7 +261,7 @@ function ProjectDetailModal({
                     className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] border border-[#d8dce3] bg-white px-[14px] text-[13px] font-semibold text-[#272b30] disabled:opacity-50"
                   >
                     <FileSpreadsheet size={16} />
-                    {exportingType === "workbook" ? "???..." : "???? Excel"}
+                    {exportingType === "workbook" ? "导出中..." : "导出 Excel"}
                   </button>
                   <button
                     onClick={() => void handleExport("package")}
@@ -269,7 +269,7 @@ function ProjectDetailModal({
                     className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] bg-[#272b30] px-[14px] text-[13px] font-semibold text-white disabled:opacity-50"
                   >
                     <FolderArchive size={16} />
-                    {exportingType === "package" ? "???..." : "???????"}
+                    {exportingType === "package" ? "打包中..." : "下载材料包"}
                   </button>
                   <div className="basis-full grid grid-cols-1 gap-[12px] rounded-[14px] border border-[#eef1f4] bg-[#fafbfc] p-[14px] xl:grid-cols-[180px_180px_auto]">
                     <div className="flex flex-col gap-[6px]">
@@ -293,7 +293,7 @@ function ProjectDetailModal({
                     <div className="flex items-end">
                       <button
                         onClick={() => void handleLedgerExport()}
-                        disabled={!project || exportingLedger || normalizeStatus(project.status) === "杩涜涓?"}
+                        disabled={!project || exportingLedger || normalizeStatus(project.status) === "进行中"}
                         className="inline-flex h-[42px] items-center gap-[8px] rounded-[12px] border border-[#d8dce3] bg-white px-[14px] text-[13px] font-semibold text-[#272b30] disabled:opacity-50"
                       >
                         <FileSpreadsheet size={16} />

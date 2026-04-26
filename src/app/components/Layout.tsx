@@ -105,11 +105,11 @@ type NavItem = {
   label: string;
   to: string;
   icon: (active: boolean) => ReactNode;
+  children?: Omit<NavItem, "icon" | "children">[];
 };
 
 type Section = {
   label: string;
-  emoji: string;
   items: NavItem[];
 };
 
@@ -125,7 +125,6 @@ function SidebarSection({ section, defaultOpen = true }: { section: Section; def
         className="flex items-center justify-between rounded-[8px] px-[12px] py-[8px] transition-colors hover:bg-[#f4f4f4]"
       >
         <div className="flex items-center gap-[8px]">
-          <span className="text-[14px]">{section.emoji}</span>
           <span
             className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[20px] tracking-[-0.1px] ${
               isAnyActive ? "text-[#272b30]" : "text-[#9a9fa5]"
@@ -140,27 +139,48 @@ function SidebarSection({ section, defaultOpen = true }: { section: Section; def
       {open ? (
         <div className="mt-[2px] ml-[8px] flex flex-col gap-[2px] border-l border-[#efefef] pl-[12px]">
           {section.items.map((item) => {
-            const active = location.pathname === item.to;
+            const active = item.children?.length
+              ? location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+              : location.pathname === item.to;
             return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={`flex items-center gap-[10px] rounded-[10px] px-[12px] py-[10px] transition-colors ${
-                  active
-                    ? "bg-[#efefef] shadow-[inset_0px_-2px_1px_0px_rgba(0,0,0,0.05),inset_0px_1px_1px_0px_white]"
-                    : "hover:bg-[#f4f4f4]"
-                }`}
-              >
-                {item.icon(active)}
-                <span
-                  className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[14px] font-semibold leading-[22px] tracking-[-0.14px] ${
-                    active ? "text-[#272b30]" : "text-[#6f767e]"
+              <div key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={`flex items-center gap-[10px] rounded-[10px] px-[12px] py-[10px] transition-colors ${
+                    active
+                      ? "bg-[#efefef] shadow-[inset_0px_-2px_1px_0px_rgba(0,0,0,0.05),inset_0px_1px_1px_0px_white]"
+                      : "hover:bg-[#f4f4f4]"
                   }`}
                 >
-                  {item.label}
-                </span>
-                {active ? <div className="ml-auto h-[6px] w-[6px] rounded-full bg-[#272b30]" /> : null}
-              </NavLink>
+                  {item.icon(active)}
+                  <span
+                    className={`font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[14px] font-semibold leading-[22px] tracking-[-0.14px] ${
+                      active ? "text-[#272b30]" : "text-[#6f767e]"
+                    }`}
+                  >
+                    {item.label}
+                  </span>
+                  {active ? <div className="ml-auto h-[6px] w-[6px] rounded-full bg-[#272b30]" /> : null}
+                </NavLink>
+                {active && item.children?.length ? (
+                  <div className="mt-[4px] ml-[28px] flex flex-col gap-[2px] border-l border-[#e8e8e8] pl-[10px]">
+                    {item.children.map((child) => {
+                      const childActive = location.pathname === child.to;
+                      return (
+                        <NavLink
+                          key={child.to}
+                          to={child.to}
+                          className={`rounded-[8px] px-[10px] py-[7px] text-[12px] font-semibold transition-colors ${
+                            childActive ? "bg-[#f4f7fb] text-[#272b30]" : "text-[#8c8f94] hover:bg-[#f7f7f8] hover:text-[#272b30]"
+                          }`}
+                        >
+                          {child.label}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -235,7 +255,6 @@ export function Layout() {
   const sections: Section[] = [
     {
       label: "基础数据",
-      emoji: "📘",
       items: [
         { label: "人员管理", to: "/personnel", icon: (active) => <IconPerson active={active} /> },
         { label: "设备管理", to: "/equipment", icon: (active) => <IconTool active={active} /> },
@@ -244,17 +263,29 @@ export function Layout() {
     },
     {
       label: "项目管理",
-      emoji: "📁",
       items: [
         { label: "项目列表", to: "/projects", icon: (active) => <IconAttachment active={active} /> },
         { label: "创建项目", to: "/projects/create", icon: (active) => <IconCreate active={active} /> },
-        { label: "月度汇总", to: "/projects/monthly", icon: (active) => <IconSave active={active} /> },
+        {
+          label: "月度汇总",
+          to: "/projects/monthly",
+          icon: (active) => <IconSave active={active} />,
+          children: [
+            { label: "人员人工费用", to: "/projects/monthly/labor" },
+            { label: "直接投入费用", to: "/projects/monthly/direct" },
+            { label: "折旧与长期待摊", to: "/projects/monthly/deprec" },
+            { label: "无形资产摊销", to: "/projects/monthly/intangible" },
+            { label: "新产品设计费等", to: "/projects/monthly/design" },
+            { label: "装备调试费用", to: "/projects/monthly/equip" },
+            { label: "其他相关费用", to: "/projects/monthly/other" },
+            { label: "委托研发费用", to: "/projects/monthly/outsource" },
+          ],
+        },
         { label: "待结算项目", to: "/projects/pending-settlement", icon: (active) => <IconSettle active={active} /> },
       ],
     },
     {
       label: "系统管理",
-      emoji: "⚙️",
       items: [
         { label: "操作日志", to: "/operation-log", icon: (active) => <IconSave active={active} /> },
         { label: "账号管理", to: "/accounts", icon: (active) => <IconSettings active={active} /> },
@@ -289,9 +320,10 @@ export function Layout() {
   }
 
   return (
-    <div className="flex min-h-screen w-full bg-[#f4f4f4]">
-      <div className="sticky top-0 flex h-screen w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
-        <div className="flex flex-1 flex-col gap-[32px] px-[20px] py-[24px]">
+    <div className="flex h-screen w-full overflow-hidden bg-[#f4f4f4]">
+      <div className="flex h-full w-[260px] flex-shrink-0 flex-col bg-[#fcfcfc] shadow-[inset_-1px_0_0_#f4f4f4]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-[20px] py-[24px]">
+          <div className="flex flex-col gap-[32px]">
           <div className="flex items-center gap-[12px] px-[4px]">
             <BrandLogo size={40} />
             <p className="font-['Inter:Semi_Bold','Noto_Sans_SC:Bold',sans-serif] text-[13px] font-semibold leading-[20px] tracking-[-0.1px] text-[#272b30]">
@@ -328,6 +360,7 @@ export function Layout() {
               <SidebarSection key={section.label} section={section} />
             ))}
           </div>
+          </div>
         </div>
 
         <div className="border-t border-[#f4f4f4] px-[20px] py-[20px]">
@@ -358,7 +391,7 @@ export function Layout() {
         </div>
       </div>
 
-      <div className="flex min-h-screen flex-1 flex-col overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex h-[72px] flex-shrink-0 items-center justify-end bg-[#fcfcfc] px-[40px] shadow-[inset_0_-1px_0_#f4f4f4]">
           <div className="flex items-center gap-[8px]">
             <div className="relative flex h-[40px] w-[40px] cursor-pointer items-center justify-center rounded-[10px] transition-colors hover:bg-[#f4f4f4]">
@@ -372,7 +405,7 @@ export function Layout() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto">
           <Outlet />
         </div>
       </div>
