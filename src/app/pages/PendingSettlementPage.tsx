@@ -12,6 +12,8 @@ type SettlementRow = {
   status: string;
   amount: number;
   updatedAt?: string;
+  projectStartDate?: string;
+  hasMonthlyData: boolean;
 };
 
 function getCurrentMonth() {
@@ -20,6 +22,8 @@ function getCurrentMonth() {
 
 function getStatusLabel(status?: string) {
   switch (status) {
+    case "missing":
+      return "未录入";
     case "settled":
       return "已结算";
     case "finalized":
@@ -31,6 +35,8 @@ function getStatusLabel(status?: string) {
 
 function getStatusStyle(status?: string) {
   switch (status) {
+    case "missing":
+      return "bg-[#f4f4f4] text-[#6f767e]";
     case "settled":
       return "bg-[#e6f9f0] text-[#0d9f5f]";
     case "finalized":
@@ -42,6 +48,10 @@ function getStatusStyle(status?: string) {
 
 function formatMoney(value: number) {
   return `¥ ${Number(value || 0).toFixed(2)}`;
+}
+
+function getProjectMonth(startDate?: string) {
+  return startDate ? String(startDate).slice(0, 7) : getCurrentMonth();
 }
 
 function getFeeCategoryLabel(code: string) {
@@ -175,7 +185,7 @@ function DetailModal({
 export function PendingSettlementPage() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
-  const [allMonths, setAllMonths] = useState(false);
+  const [allMonths, setAllMonths] = useState(true);
   const [rows, setRows] = useState<SettlementRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -184,6 +194,8 @@ export function PendingSettlementPage() {
   const [selectedDetail, setSelectedDetail] = useState<MonthlyDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [filter, setFilter] = useState<"all" | "draft" | "finalized" | "settled">("all");
+  const [page, setPage] = useState(1);
+  const pageSize = 5;
 
   async function loadPage() {
     setLoading(true);
@@ -197,23 +209,24 @@ export function PendingSettlementPage() {
 
       projectPage.records.forEach((project, index) => {
         const list = monthlyLists[index];
-        if (!list || list.length === 0) {
-          return;
-        }
 
         if (allMonths) {
-          const latest = [...list].sort((a, b) => String(b.workMonth).localeCompare(String(a.workMonth)))[0];
-          if (!latest) {
-            return;
-          }
+          const latest = [...(list || [])].sort((a, b) => String(b.workMonth).localeCompare(String(a.workMonth)))[0];
+
           nextRows.push({
             projectId: project.id,
             projectName: project.projectName,
-            yearMonth: String(latest.workMonth).slice(0, 7),
-            status: latest.status,
-            amount: Number(latest.grandTotal || 0),
-            updatedAt: latest.updatedAt,
+            yearMonth: latest ? String(latest.workMonth).slice(0, 7) : getProjectMonth(project.startDate),
+            status: latest ? latest.status : "missing",
+            amount: latest ? Number(latest.grandTotal || 0) : 0,
+            updatedAt: latest?.updatedAt,
+            projectStartDate: project.startDate,
+            hasMonthlyData: Boolean(latest),
           });
+          return;
+        }
+
+        if (!list || list.length === 0) {
           return;
         }
 
@@ -228,10 +241,24 @@ export function PendingSettlementPage() {
           status: match.status,
           amount: Number(match.grandTotal || 0),
           updatedAt: match.updatedAt,
+          projectStartDate: project.startDate,
+          hasMonthlyData: true,
         });
       });
 
-      setRows(nextRows);
+      setRows(
+        nextRows.sort((a, b) => {
+          const startCompare = String(b.projectStartDate || "").localeCompare(String(a.projectStartDate || ""));
+          if (startCompare !== 0) {
+            return startCompare;
+          }
+          const monthCompare = String(b.yearMonth || "").localeCompare(String(a.yearMonth || ""));
+          if (monthCompare !== 0) {
+            return monthCompare;
+          }
+          return b.projectId - a.projectId;
+        }),
+      );
     } catch (error) {
       setPageError(error instanceof Error ? error.message : "待结算页面加载失败");
     } finally {
@@ -244,7 +271,11 @@ export function PendingSettlementPage() {
   }, [selectedMonth, allMonths]);
 
   useEffect(() => {
-    if (!selectedRow) {
+    setPage(1);
+  }, [selectedMonth, allMonths, filter]);
+
+  useEffect(() => {
+    if (!selectedRow || !selectedRow.hasMonthlyData) {
       return;
     }
 
@@ -293,6 +324,19 @@ export function PendingSettlementPage() {
       .slice(-6)
       .map(([month, amount]) => ({ month, amount }));
   }, [rows]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const pageRows = useMemo(() => {
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * pageSize;
+    return visibleRows.slice(start, start + pageSize);
+  }, [page, totalPages, visibleRows]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   async function handleSubmit(row: SettlementRow) {
     setActing(true);
@@ -432,11 +476,11 @@ export function PendingSettlementPage() {
                 ) : visibleRows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="py-[48px] text-center text-[14px] text-[#9a9fa5]">
-                      当前月份暂无可结算数据
+                      {allMonths ? "暂无可结算项目数据" : "当前月份暂无可结算数据"}
                     </td>
                   </tr>
                 ) : (
-                  visibleRows.map((row) => (
+                  pageRows.map((row) => (
                     <tr key={`${row.projectId}-${row.yearMonth}`} className="border-b border-[#f4f4f4] last:border-b-0 transition-colors hover:bg-[#fafafa]">
                       <td className="px-[20px] py-[15px] text-[13px] font-semibold text-[#272b30]">{row.projectName}</td>
                       <td className="px-[20px] py-[15px] text-[13px] text-[#6f767e]">{row.yearMonth}</td>
@@ -476,12 +520,21 @@ export function PendingSettlementPage() {
                               重新打开编辑
                             </button>
                           ) : null}
-                          <button
-                            onClick={() => setSelectedRow(row)}
-                            className="h-[30px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]"
-                          >
-                            详情
-                          </button>
+                          {row.hasMonthlyData ? (
+                            <button
+                              onClick={() => setSelectedRow(row)}
+                              className="h-[30px] rounded-[8px] border border-[#efefef] bg-white px-[12px] text-[12px] font-semibold text-[#272b30]"
+                            >
+                              详情
+                            </button>
+                          ) : (
+                            <button
+                              disabled
+                              className="h-[30px] rounded-[8px] border border-[#efefef] bg-[#f7f7f7] px-[12px] text-[12px] font-semibold text-[#9a9fa5]"
+                            >
+                              暂无详情
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -490,6 +543,29 @@ export function PendingSettlementPage() {
               </tbody>
             </table>
           </div>
+          {!loading && visibleRows.length > 0 ? (
+            <div className="flex items-center justify-between border-t border-[#f4f4f4] px-[20px] py-[14px]">
+              <div className="text-[13px] text-[#9a9fa5]">
+                共 <span className="font-semibold text-[#272b30]">{visibleRows.length}</span> 个项目 · 第 {Math.min(page, totalPages)} / {totalPages} 页
+              </div>
+              <div className="flex items-center gap-[10px]">
+                <button
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                  disabled={page <= 1}
+                  className="h-[34px] rounded-[10px] border border-[#efefef] bg-white px-[14px] text-[13px] font-semibold text-[#6f767e] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  上一页
+                </button>
+                <button
+                  onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+                  disabled={page >= totalPages}
+                  className="h-[34px] rounded-[10px] border border-[#efefef] bg-white px-[14px] text-[13px] font-semibold text-[#6f767e] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
 
